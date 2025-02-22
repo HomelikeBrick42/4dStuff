@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = { version = "1.0.96", features = ["backtrace"] }
+cgmath = "0.18.0"
 eframe = { version = "0.31.0", default-features = false, features = [
     "accesskit",
     "default_fonts",
@@ -12,3 +13,4 @@ eframe = { version = "0.31.0", default-features = false, features = [
     "wgpu",
     "x11",
 ] }
+encase = { version = "0.10.0", features = ["cgmath"] }
