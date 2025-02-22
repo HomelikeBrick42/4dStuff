@@ -1,4 +1,5 @@
 use crate::{Camera, DrawUi, HyperSphere};
+use cgmath::InnerSpace;
 use eframe::{egui, wgpu};
 use encase::{ArrayLength, ShaderSize, ShaderType, StorageBuffer, UniformBuffer};
 
@@ -8,6 +9,11 @@ struct GpuCamera {
     pub forward: cgmath::Vector4<f32>,
     pub right: cgmath::Vector4<f32>,
     pub up: cgmath::Vector4<f32>,
+    pub sun_direction: cgmath::Vector4<f32>,
+    pub sun_color: cgmath::Vector3<f32>,
+    pub ambient_color: cgmath::Vector3<f32>,
+    pub up_sky_color: cgmath::Vector3<f32>,
+    pub down_sky_color: cgmath::Vector3<f32>,
     pub aspect: f32,
 }
 
@@ -34,6 +40,11 @@ pub struct App {
     egui_texture_id: egui::TextureId,
 
     camera: Camera,
+    sun_direction: cgmath::Vector4<f32>,
+    sun_color: cgmath::Vector3<f32>,
+    ambient_color: cgmath::Vector3<f32>,
+    up_sky_color: cgmath::Vector3<f32>,
+    down_sky_color: cgmath::Vector3<f32>,
     camera_uniform_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
 
@@ -163,6 +174,11 @@ impl App {
             camera: Camera {
                 position: cgmath::vec4(0.0, 0.0, 0.0, 0.0),
             },
+            sun_direction: cgmath::vec4(-0.2, 0.1, 1.0, 0.0),
+            sun_color: cgmath::vec3(0.9, 0.8, 0.7),
+            ambient_color: cgmath::vec3(0.1, 0.1, 0.1),
+            up_sky_color: cgmath::vec3(0.5, 0.5, 0.9),
+            down_sky_color: cgmath::vec3(0.2, 0.2, 0.2),
             camera_uniform_buffer,
             camera_bind_group,
 
@@ -273,6 +289,11 @@ impl App {
             forward: cgmath::vec4(1.0, 0.0, 0.0, 0.0),
             right: cgmath::vec4(0.0, 1.0, 0.0, 0.0),
             up: cgmath::vec4(0.0, 0.0, 1.0, 0.0),
+            sun_direction: self.sun_direction.normalize(),
+            sun_color: self.sun_color,
+            ambient_color: self.ambient_color,
+            up_sky_color: self.up_sky_color,
+            down_sky_color: self.down_sky_color,
             aspect: render_width as f32 / render_height as f32,
         };
         UniformBuffer::new(&mut *buffer)
@@ -363,6 +384,36 @@ impl eframe::App for App {
             ui.label(format!("FPS: {:.2}", 1.0 / dt.as_secs_f32()));
             ui.collapsing("Camera", |ui| {
                 camera_changed |= self.camera.draw_ui(ui);
+            });
+            ui.horizontal(|ui| {
+                ui.label("Sun Direction: ");
+                camera_changed |= self.sun_direction.draw_ui(ui);
+            });
+            if ui.button("Normalise Sun Direction").clicked() {
+                self.sun_direction = self.sun_direction.normalize();
+                camera_changed = true;
+            }
+            ui.horizontal(|ui| {
+                ui.label("Sun Color: ");
+                camera_changed |= ui.color_edit_button_rgb(self.sun_color.as_mut()).changed();
+            });
+            ui.horizontal(|ui| {
+                ui.label("Ambient Color: ");
+                camera_changed |= ui
+                    .color_edit_button_rgb(self.ambient_color.as_mut())
+                    .changed();
+            });
+            ui.horizontal(|ui| {
+                ui.label("Up Sky Color: ");
+                camera_changed |= ui
+                    .color_edit_button_rgb(self.up_sky_color.as_mut())
+                    .changed();
+            });
+            ui.horizontal(|ui| {
+                ui.label("Down Sky Color: ");
+                camera_changed |= ui
+                    .color_edit_button_rgb(self.down_sky_color.as_mut())
+                    .changed();
             });
         });
 

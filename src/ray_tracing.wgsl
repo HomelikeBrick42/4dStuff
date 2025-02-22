@@ -7,6 +7,11 @@ struct Camera {
     forward: vec4<f32>,
     right: vec4<f32>,
     up: vec4<f32>,
+    sun_direction: vec4<f32>,
+    sun_color: vec3<f32>,
+    ambient_color: vec3<f32>,
+    up_sky_color: vec3<f32>,
+    down_sky_color: vec3<f32>,
     aspect: f32,
 }
 
@@ -36,8 +41,10 @@ struct Ray {
 
 struct Hit {
     hit: bool,
-    distance: f32,
+    position: vec4<f32>,
+    normal: vec4<f32>,
     color: vec3<f32>,
+    distance: f32,
 }
 
 fn hyper_sphere_hit(ray: Ray, hyper_sphere: HyperSphere) -> Hit {
@@ -51,9 +58,13 @@ fn hyper_sphere_hit(ray: Ray, hyper_sphere: HyperSphere) -> Hit {
     let discriminant = h * h - a * c;
 
     if discriminant >= 0.0 {
-        hit.hit = true;
         hit.distance = (h - sqrt(discriminant)) / a;
-        hit.color = hyper_sphere.color;
+        if hit.distance >= 0.0 {
+            hit.hit = true;
+            hit.position = ray.origin + ray.direction * hit.distance;
+            hit.normal = (hit.position - hyper_sphere.position) / hyper_sphere.radius;
+            hit.color = hyper_sphere.color;
+        }
     }
 
     return hit;
@@ -91,10 +102,21 @@ fn main(
     ray.origin = camera.position;
     ray.direction = normalize(camera.right * (uv.x * camera.aspect) + camera.up * uv.y + camera.forward);
 
-    var color = ray.direction.xyz * 0.5 + 0.5;
+    var color = mix(camera.down_sky_color, camera.up_sky_color, ray.direction.z * 0.5 + 0.5);
+
     let hit = ray_hit(ray);
     if hit.hit {
-        color = hit.color;
+        color = hit.color * camera.ambient_color;
+        var sun_ray: Ray;
+        sun_ray.origin = hit.position + hit.normal * 0.01;
+        sun_ray.direction = camera.sun_direction;
+        let sun_hit = ray_hit(sun_ray);
+        if !sun_hit.hit {
+            color += hit.color * max(dot(sun_ray.direction, hit.normal), 0.0);
+        }
+    } else if dot(camera.sun_direction, ray.direction) > 0.99 {
+        color = camera.sun_color;
     }
+
     textureStore(output_texture, coords, vec4<f32>(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0));
 }
