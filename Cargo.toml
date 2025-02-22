@@ -1,0 +1,14 @@
+[package]
+name = "ray_tracer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { version = "1.0.96", features = ["backtrace"] }
+eframe = { version = "0.31.0", default-features = false, features = [
+    "accesskit",
+    "default_fonts",
+    "wayland",
+    "wgpu",
+    "x11",
+] }
