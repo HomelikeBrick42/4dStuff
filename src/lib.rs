@@ -22,12 +22,12 @@ struct Camera {
 impl Camera {
     fn get_transform(&self) -> Transform {
         Transform::translation(self.position)
-            * Transform::rotation_xy(self.xy_rotation)
-            * Transform::rotation_xz(self.xz_rotation)
-            * Transform::rotation_yz(self.yz_rotation)
             * Transform::rotation_xw(self.xw_rotation)
             * Transform::rotation_yw(self.yw_rotation)
             * Transform::rotation_zw(self.zw_rotation)
+            * Transform::rotation_xy(self.xy_rotation)
+            * Transform::rotation_xz(self.xz_rotation)
+            * Transform::rotation_yz(self.yz_rotation)
     }
 }
 
