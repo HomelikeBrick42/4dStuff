@@ -9,14 +9,25 @@ use serde::{Deserialize, Serialize};
 use transform::Transform;
 
 #[derive(Serialize, Deserialize)]
-struct Camera {
-    pub base_transform: Transform,
-    pub extra_transform: Transform,
+enum Camera {
+    Normal {
+        base_transform: Transform,
+        vertical_look: f32,
+    },
+    Volume {
+        transform: Transform,
+    },
 }
 
 impl Camera {
     pub fn get_transform(&self) -> Transform {
-        self.base_transform * self.extra_transform
+        match *self {
+            Self::Normal {
+                base_transform,
+                vertical_look,
+            } => base_transform * Transform::rotation_xz(vertical_look),
+            Self::Volume { transform } => transform,
+        }
     }
 }
 
@@ -65,7 +76,12 @@ impl DrawUi for Camera {
             ui.label("Position: ");
             if position.draw_ui(ui) {
                 let difference = position - old_position;
-                self.base_transform = Transform::translation(difference) * self.base_transform;
+                let (Self::Normal {
+                    base_transform: transform,
+                    vertical_look: _,
+                }
+                | Self::Volume { transform }) = self;
+                *transform = Transform::translation(difference) * *transform;
                 changed = true;
             }
         });
@@ -94,8 +110,17 @@ impl DrawUi for Camera {
         });
 
         if ui.button("Reset Rotation").clicked() {
-            self.base_transform = Transform::translation(position);
-            self.extra_transform = Transform::IDENTITY;
+            let transform = match self {
+                Camera::Normal {
+                    base_transform,
+                    vertical_look,
+                } => {
+                    *vertical_look = 0.0;
+                    base_transform
+                }
+                Camera::Volume { transform } => transform,
+            };
+            *transform = Transform::translation(position);
             changed = true;
         }
 
