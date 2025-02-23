@@ -173,6 +173,12 @@ impl App {
 
             camera: Camera {
                 position: cgmath::vec4(0.0, 0.0, 0.0, 0.0),
+                xy_rotation: 0.0,
+                xz_rotation: 0.0,
+                xw_rotation: 0.0,
+                yz_rotation: 0.0,
+                yw_rotation: 0.0,
+                zw_rotation: 0.0,
             },
             sun_direction: cgmath::vec4(-0.2, 0.1, 1.0, 0.0),
             sun_color: cgmath::vec3(0.9, 0.8, 0.7),
@@ -283,12 +289,18 @@ impl App {
             .write_buffer_with(&self.camera_uniform_buffer, 0, GpuCamera::SHADER_SIZE)
             .expect("the camera uniform buffer should be big enough to write a GpuCamera");
 
-        let Camera { position } = self.camera;
+        let transform = self.camera.get_transform().normalized();
         let camera = GpuCamera {
-            position,
-            forward: cgmath::vec4(1.0, 0.0, 0.0, 0.0),
-            right: cgmath::vec4(0.0, 1.0, 0.0, 0.0),
-            up: cgmath::vec4(0.0, 0.0, 1.0, 0.0),
+            position: transform.transform(cgmath::vec4(0.0, 0.0, 0.0, 0.0)),
+            forward: transform
+                .transform_direction(cgmath::vec4(1.0, 0.0, 0.0, 0.0))
+                .normalize(),
+            right: transform
+                .transform_direction(cgmath::vec4(0.0, 1.0, 0.0, 0.0))
+                .normalize(),
+            up: transform
+                .transform_direction(cgmath::vec4(0.0, 0.0, 1.0, 0.0))
+                .normalize(),
             sun_direction: self.sun_direction.normalize(),
             sun_color: self.sun_color,
             ambient_color: self.ambient_color,

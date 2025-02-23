@@ -1,12 +1,32 @@
 #![deny(rust_2018_idioms)]
 
 mod app;
+pub mod transform;
 
 pub use app::App;
 use eframe::egui;
+use transform::Transform;
 
 struct Camera {
     pub position: cgmath::Vector4<f32>,
+    pub xy_rotation: f32,
+    pub xz_rotation: f32,
+    pub xw_rotation: f32,
+    pub yz_rotation: f32,
+    pub yw_rotation: f32,
+    pub zw_rotation: f32,
+}
+
+impl Camera {
+    fn get_transform(&self) -> Transform {
+        Transform::translation(self.position)
+            * Transform::rotation_xy(self.xy_rotation)
+            * Transform::rotation_xz(self.xz_rotation)
+            * Transform::rotation_xw(self.xw_rotation)
+            * Transform::rotation_yz(self.yz_rotation)
+            * Transform::rotation_yw(self.yw_rotation)
+            * Transform::rotation_zw(self.zw_rotation)
+    }
 }
 
 struct HyperSphere {
@@ -48,6 +68,30 @@ impl DrawUi for Camera {
         ui.horizontal(|ui| {
             ui.label("Position: ");
             changed |= self.position.draw_ui(ui);
+        });
+        ui.horizontal(|ui| {
+            ui.label("XY Rotation: ");
+            changed |= ui.drag_angle(&mut self.xy_rotation).changed();
+        });
+        ui.horizontal(|ui| {
+            ui.label("XZ Rotation: ");
+            changed |= ui.drag_angle(&mut self.xz_rotation).changed();
+        });
+        ui.horizontal(|ui| {
+            ui.label("XW Rotation: ");
+            changed |= ui.drag_angle(&mut self.xw_rotation).changed();
+        });
+        ui.horizontal(|ui| {
+            ui.label("YZ Rotation: ");
+            changed |= ui.drag_angle(&mut self.yz_rotation).changed();
+        });
+        ui.horizontal(|ui| {
+            ui.label("YW Rotation: ");
+            changed |= ui.drag_angle(&mut self.yw_rotation).changed();
+        });
+        ui.horizontal(|ui| {
+            ui.label("ZW Rotation: ");
+            changed |= ui.drag_angle(&mut self.zw_rotation).changed();
         });
         changed
     }
