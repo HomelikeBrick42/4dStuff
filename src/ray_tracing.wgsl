@@ -59,7 +59,7 @@ fn hyper_sphere_hit(ray: Ray, hyper_sphere: HyperSphere) -> Hit {
 
     if discriminant >= 0.0 {
         hit.distance = (h - sqrt(discriminant)) / a;
-        if hit.distance >= 0.0 {
+        if hit.distance > 0.0 {
             hit.hit = true;
             hit.position = ray.origin + ray.direction * hit.distance;
             hit.normal = (hit.position - hyper_sphere.position) / hyper_sphere.radius;
@@ -108,7 +108,7 @@ fn main(
     if hit.hit {
         color = hit.color * camera.ambient_color;
         var sun_ray: Ray;
-        sun_ray.origin = hit.position + hit.normal * 0.01;
+        sun_ray.origin = hit.position;
         sun_ray.direction = camera.sun_direction;
         let sun_hit = ray_hit(sun_ray);
         if !sun_hit.hit {

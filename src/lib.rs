@@ -1,33 +1,34 @@
 #![deny(rust_2018_idioms)]
 
 mod app;
-pub mod transform;
+pub mod rotor;
 
 pub use app::App;
 use eframe::egui;
+use rotor::Rotor;
 use serde::{Deserialize, Serialize};
-use transform::Transform;
 
 #[derive(Serialize, Deserialize)]
-enum Camera {
-    Normal {
-        base_transform: Transform,
-        vertical_look: f32,
-    },
-    Volume {
-        transform: Transform,
-    },
+struct Camera {
+    pub position: cgmath::Vector4<f32>,
+    pub base_rotation: Rotor,
+    pub mode: CameraMode,
+}
+
+#[derive(Serialize, Deserialize)]
+enum CameraMode {
+    Normal { vertical_angle: f32 },
+    Volume,
 }
 
 impl Camera {
-    pub fn get_transform(&self) -> Transform {
-        match *self {
-            Self::Normal {
-                base_transform,
-                vertical_look,
-            } => base_transform * Transform::rotation_xz(vertical_look),
-            Self::Volume { transform } => {
-                transform * Transform::rotation_zw(std::f32::consts::FRAC_PI_2)
+    pub fn get_rotation(&self) -> Rotor {
+        match self.mode {
+            CameraMode::Normal { vertical_angle } => {
+                self.base_rotation * Rotor::rotation_xz(vertical_angle)
+            }
+            CameraMode::Volume => {
+                self.base_rotation * Rotor::rotation_zw(std::f32::consts::FRAC_PI_2)
             }
         }
     }
@@ -71,30 +72,18 @@ impl DrawUi for Camera {
     fn draw_ui(&mut self, ui: &mut egui::Ui) -> bool {
         let mut changed = false;
 
-        let transform = self.get_transform();
-        let mut position = transform.transform(cgmath::vec4(0.0, 0.0, 0.0, 0.0));
-        let old_position = position;
         ui.horizontal(|ui| {
             ui.label("Position: ");
-            if position.draw_ui(ui) {
-                let difference = position - old_position;
-                let transform = match self {
-                    Self::Normal {
-                        base_transform: transform,
-                        vertical_look: _,
-                    }
-                    | Self::Volume { transform } => transform,
-                };
-                *transform = Transform::translation(difference) * *transform;
-                changed = true;
-            }
+            changed |= self.position.draw_ui(ui);
         });
 
         ui.add_enabled_ui(false, |ui| {
-            let mut forward = transform.transform_direction(cgmath::vec4(1.0, 0.0, 0.0, 0.0));
-            let mut right = transform.transform_direction(cgmath::vec4(0.0, 1.0, 0.0, 0.0));
-            let mut up = transform.transform_direction(cgmath::vec4(0.0, 0.0, 1.0, 0.0));
-            let mut ana = transform.transform_direction(cgmath::vec4(0.0, 0.0, 0.0, 1.0));
+            let rotation = self.get_rotation();
+            let mut forward = rotation.rotate(cgmath::vec4(1.0, 0.0, 0.0, 0.0));
+            let mut right = rotation.rotate(cgmath::vec4(0.0, 1.0, 0.0, 0.0));
+            let mut up = rotation.rotate(cgmath::vec4(0.0, 0.0, 1.0, 0.0));
+            let mut ana = rotation.rotate(cgmath::vec4(0.0, 0.0, 0.0, 1.0));
+
             ui.horizontal(|ui| {
                 ui.label("Forward: ");
                 forward.draw_ui(ui);
@@ -113,69 +102,44 @@ impl DrawUi for Camera {
             });
         });
 
-        let volume_enabled = match self {
-            Camera::Normal {
-                base_transform: _,
-                vertical_look,
-            } => *vertical_look == 0.0,
-            Camera::Volume { transform: _ } => true,
+        let volume_change_enabled = match self.mode {
+            CameraMode::Normal { vertical_angle } => vertical_angle == 0.0,
+            CameraMode::Volume => true,
         };
 
         if ui.button("Reset Rotation").clicked() {
-            let transform = match self {
-                Camera::Normal {
-                    base_transform,
-                    vertical_look,
-                } => {
-                    *vertical_look = 0.0;
-                    base_transform
-                }
-                Camera::Volume { transform } => transform,
-            };
-            *transform = Transform::translation(position);
+            match &mut self.mode {
+                CameraMode::Normal { vertical_angle } => *vertical_angle = 0.0,
+                CameraMode::Volume => {}
+            }
+            self.base_rotation = Rotor::IDENTITY;
             changed = true;
         }
 
         ui.horizontal(|ui| {
             ui.label("Volume View: ");
 
-            let mut volume = matches!(self, Self::Volume { .. });
-            ui.add_enabled_ui(volume_enabled, |ui| {
+            let mut volume = matches!(self.mode, CameraMode::Volume);
+            ui.add_enabled_ui(volume_change_enabled, |ui| {
                 if ui.checkbox(&mut volume, "").clicked() {
-                    match *self {
-                        Camera::Normal {
-                            base_transform,
-                            vertical_look: _,
-                        } if volume => {
-                            *self = Camera::Volume {
-                                transform: base_transform,
-                            };
+                    self.mode = if volume {
+                        CameraMode::Volume
+                    } else {
+                        CameraMode::Normal {
+                            vertical_angle: 0.0,
                         }
-
-                        Camera::Volume { transform } if !volume => {
-                            *self = Camera::Normal {
-                                base_transform: transform,
-                                vertical_look: 0.0,
-                            };
-                        }
-
-                        _ => {}
                     };
                     changed = true;
                 }
             });
         });
 
-        if let Self::Normal {
-            base_transform: _,
-            vertical_look,
-        } = self
-        {
+        if let CameraMode::Normal { vertical_angle } = &mut self.mode {
             ui.horizontal(|ui| {
                 ui.label("Vertical Angle: ");
-                changed |= ui.drag_angle(vertical_look).changed();
+                changed |= ui.drag_angle(vertical_angle).changed();
             });
-            if !volume_enabled {
+            if !volume_change_enabled {
                 ui.label("Volume View cannot be enabled if the vertical angle is not exactly 0");
             }
         }
