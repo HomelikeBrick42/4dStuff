@@ -1,7 +1,8 @@
 use encase::ShaderType;
+use serde::{Deserialize, Serialize};
 use std::ops::{Mul, Not};
 
-#[derive(Debug, Clone, Copy, ShaderType)]
+#[derive(Debug, Clone, Copy, ShaderType, Serialize, Deserialize)]
 pub struct Transform {
     pub s: f32,
     pub e01: f32,

@@ -1,4 +1,4 @@
-use crate::{Camera, DrawUi, HyperSphere};
+use crate::{Camera, DrawUi, HyperSphere, transform::Transform};
 use cgmath::InnerSpace;
 use eframe::{egui, wgpu};
 use encase::{ArrayLength, ShaderSize, ShaderType, StorageBuffer, UniformBuffer};
@@ -51,13 +51,8 @@ impl Default for State {
     fn default() -> Self {
         Self {
             camera: Camera {
-                position: cgmath::vec4(0.0, 0.0, 0.0, 0.0),
-                xy_rotation: 0.0,
-                xz_rotation: 0.0,
-                xw_rotation: 0.0,
-                yz_rotation: 0.0,
-                yw_rotation: 0.0,
-                zw_rotation: 0.0,
+                base_transform: Transform::IDENTITY,
+                extra_transform: Transform::IDENTITY,
             },
 
             sun_direction: cgmath::vec4(-0.2, 0.1, 1.0, 0.0),
@@ -418,9 +413,6 @@ impl eframe::App for App {
         egui::Window::new("Settings").show(ctx, |ui| {
             ui.label(format!("Frame Time: {:.2}ms", dt.as_secs_f64() * 1000.0));
             ui.label(format!("FPS: {:.2}", 1.0 / dt.as_secs_f64()));
-            ui.collapsing("Camera", |ui| {
-                camera_changed |= self.state.camera.draw_ui(ui);
-            });
             ui.horizontal(|ui| {
                 ui.label("Sun Direction: ");
                 camera_changed |= self.state.sun_direction.draw_ui(ui);
@@ -492,44 +484,50 @@ impl eframe::App for App {
 
         if !ctx.wants_keyboard_input() {
             ctx.input(|i| {
-                let transform = self.state.camera.get_transform();
-                let forward = transform.transform_direction(cgmath::vec4(1.0, 0.0, 0.0, 0.0));
-                let right = transform.transform_direction(cgmath::vec4(0.0, 1.0, 0.0, 0.0));
-                let up = transform.transform_direction(cgmath::vec4(0.0, 0.0, 1.0, 0.0));
-                let ana = transform.transform_direction(cgmath::vec4(0.0, 0.0, 0.0, 1.0));
-
-                let movement = 2.0 * ts;
+                let movement = 4.0 * ts;
+                let forward = cgmath::vec4(movement, 0.0, 0.0, 0.0);
+                let right = cgmath::vec4(0.0, movement, 0.0, 0.0);
+                let up = cgmath::vec4(0.0, 0.0, movement, 0.0);
+                let ana = cgmath::vec4(0.0, 0.0, 0.0, movement);
 
                 if i.key_down(egui::Key::W) {
-                    self.state.camera.position += forward * movement;
+                    self.state.camera.base_transform =
+                        self.state.camera.base_transform * Transform::translation(forward);
                     camera_changed = true;
                 }
                 if i.key_down(egui::Key::S) {
-                    self.state.camera.position -= forward * movement;
+                    self.state.camera.base_transform =
+                        self.state.camera.base_transform * Transform::translation(-forward);
                     camera_changed = true;
                 }
                 if i.key_down(egui::Key::A) {
-                    self.state.camera.position -= right * movement;
+                    self.state.camera.base_transform =
+                        self.state.camera.base_transform * Transform::translation(-right);
                     camera_changed = true;
                 }
                 if i.key_down(egui::Key::D) {
-                    self.state.camera.position += right * movement;
+                    self.state.camera.base_transform =
+                        self.state.camera.base_transform * Transform::translation(right);
                     camera_changed = true;
                 }
                 if i.key_down(egui::Key::Q) {
-                    self.state.camera.position -= up * movement;
+                    self.state.camera.base_transform =
+                        self.state.camera.base_transform * Transform::translation(-up);
                     camera_changed = true;
                 }
                 if i.key_down(egui::Key::E) {
-                    self.state.camera.position += up * movement;
+                    self.state.camera.base_transform =
+                        self.state.camera.base_transform * Transform::translation(up);
                     camera_changed = true;
                 }
                 if i.key_down(egui::Key::R) {
-                    self.state.camera.position += ana * movement;
+                    self.state.camera.base_transform =
+                        self.state.camera.base_transform * Transform::translation(ana);
                     camera_changed = true;
                 }
                 if i.key_down(egui::Key::F) {
-                    self.state.camera.position -= ana * movement;
+                    self.state.camera.base_transform =
+                        self.state.camera.base_transform * Transform::translation(-ana);
                     camera_changed = true;
                 }
 
@@ -537,36 +535,44 @@ impl eframe::App for App {
 
                 if i.modifiers.shift {
                     if i.key_down(egui::Key::ArrowUp) {
-                        self.state.camera.xw_rotation += rotation;
+                        self.state.camera.base_transform =
+                            self.state.camera.base_transform * Transform::rotation_xw(rotation);
                         camera_changed = true;
                     }
                     if i.key_down(egui::Key::ArrowDown) {
-                        self.state.camera.xw_rotation -= rotation;
+                        self.state.camera.base_transform =
+                            self.state.camera.base_transform * Transform::rotation_xw(-rotation);
                         camera_changed = true;
                     }
                     if i.key_down(egui::Key::ArrowLeft) {
-                        self.state.camera.yw_rotation -= rotation;
+                        self.state.camera.base_transform =
+                            self.state.camera.base_transform * Transform::rotation_yw(-rotation);
                         camera_changed = true;
                     }
                     if i.key_down(egui::Key::ArrowRight) {
-                        self.state.camera.yw_rotation += rotation;
+                        self.state.camera.base_transform =
+                            self.state.camera.base_transform * Transform::rotation_yw(rotation);
                         camera_changed = true;
                     }
                 } else {
                     if i.key_down(egui::Key::ArrowUp) {
-                        self.state.camera.xz_rotation += rotation;
+                        self.state.camera.extra_transform =
+                            self.state.camera.extra_transform * Transform::rotation_xz(rotation);
                         camera_changed = true;
                     }
                     if i.key_down(egui::Key::ArrowDown) {
-                        self.state.camera.xz_rotation -= rotation;
+                        self.state.camera.extra_transform =
+                            self.state.camera.extra_transform * Transform::rotation_xz(-rotation);
                         camera_changed = true;
                     }
                     if i.key_down(egui::Key::ArrowLeft) {
-                        self.state.camera.xy_rotation -= rotation;
+                        self.state.camera.base_transform =
+                            self.state.camera.base_transform * Transform::rotation_xy(-rotation);
                         camera_changed = true;
                     }
                     if i.key_down(egui::Key::ArrowRight) {
-                        self.state.camera.xy_rotation += rotation;
+                        self.state.camera.base_transform =
+                            self.state.camera.base_transform * Transform::rotation_xy(rotation);
                         camera_changed = true;
                     }
                 }

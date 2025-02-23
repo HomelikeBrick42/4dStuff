@@ -10,24 +10,13 @@ use transform::Transform;
 
 #[derive(Serialize, Deserialize)]
 struct Camera {
-    pub position: cgmath::Vector4<f32>,
-    pub xy_rotation: f32,
-    pub xz_rotation: f32,
-    pub yz_rotation: f32,
-    pub xw_rotation: f32,
-    pub yw_rotation: f32,
-    pub zw_rotation: f32,
+    pub base_transform: Transform,
+    pub extra_transform: Transform,
 }
 
 impl Camera {
-    fn get_transform(&self) -> Transform {
-        Transform::translation(self.position)
-            * Transform::rotation_xw(self.xw_rotation)
-            * Transform::rotation_yw(self.yw_rotation)
-            * Transform::rotation_zw(self.zw_rotation)
-            * Transform::rotation_xy(self.xy_rotation)
-            * Transform::rotation_xz(self.xz_rotation)
-            * Transform::rotation_yz(self.yz_rotation)
+    pub fn get_transform(&self) -> Transform {
+        self.base_transform * self.extra_transform
     }
 }
 
@@ -60,41 +49,6 @@ impl DrawUi for cgmath::Vector4<f32> {
             changed |= ui
                 .add(egui::DragValue::new(&mut self.w).prefix("w: ").speed(0.1))
                 .changed();
-        });
-        changed
-    }
-}
-
-impl DrawUi for Camera {
-    fn draw_ui(&mut self, ui: &mut egui::Ui) -> bool {
-        let mut changed = false;
-        ui.horizontal(|ui| {
-            ui.label("Position: ");
-            changed |= self.position.draw_ui(ui);
-        });
-        ui.horizontal(|ui| {
-            ui.label("XY Rotation: ");
-            changed |= ui.drag_angle(&mut self.xy_rotation).changed();
-        });
-        ui.horizontal(|ui| {
-            ui.label("XZ Rotation: ");
-            changed |= ui.drag_angle(&mut self.xz_rotation).changed();
-        });
-        ui.horizontal(|ui| {
-            ui.label("YZ Rotation: ");
-            changed |= ui.drag_angle(&mut self.yz_rotation).changed();
-        });
-        ui.horizontal(|ui| {
-            ui.label("XW Rotation: ");
-            changed |= ui.drag_angle(&mut self.xw_rotation).changed();
-        });
-        ui.horizontal(|ui| {
-            ui.label("YW Rotation: ");
-            changed |= ui.drag_angle(&mut self.yw_rotation).changed();
-        });
-        ui.horizontal(|ui| {
-            ui.label("ZW Rotation: ");
-            changed |= ui.drag_angle(&mut self.zw_rotation).changed();
         });
         changed
     }
