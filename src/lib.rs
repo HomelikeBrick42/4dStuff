@@ -13,8 +13,8 @@ struct Camera {
     pub position: cgmath::Vector4<f32>,
     pub xy_rotation: f32,
     pub xz_rotation: f32,
-    pub xw_rotation: f32,
     pub yz_rotation: f32,
+    pub xw_rotation: f32,
     pub yw_rotation: f32,
     pub zw_rotation: f32,
 }
@@ -24,8 +24,8 @@ impl Camera {
         Transform::translation(self.position)
             * Transform::rotation_xy(self.xy_rotation)
             * Transform::rotation_xz(self.xz_rotation)
-            * Transform::rotation_xw(self.xw_rotation)
             * Transform::rotation_yz(self.yz_rotation)
+            * Transform::rotation_xw(self.xw_rotation)
             * Transform::rotation_yw(self.yw_rotation)
             * Transform::rotation_zw(self.zw_rotation)
     }
@@ -81,12 +81,12 @@ impl DrawUi for Camera {
             changed |= ui.drag_angle(&mut self.xz_rotation).changed();
         });
         ui.horizontal(|ui| {
-            ui.label("XW Rotation: ");
-            changed |= ui.drag_angle(&mut self.xw_rotation).changed();
-        });
-        ui.horizontal(|ui| {
             ui.label("YZ Rotation: ");
             changed |= ui.drag_angle(&mut self.yz_rotation).changed();
+        });
+        ui.horizontal(|ui| {
+            ui.label("XW Rotation: ");
+            changed |= ui.drag_angle(&mut self.xw_rotation).changed();
         });
         ui.horizontal(|ui| {
             ui.label("YW Rotation: ");
