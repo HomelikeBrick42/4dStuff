@@ -201,12 +201,11 @@ impl App {
         let mut this = Self {
             last_frame: None,
 
-            state: cc
-                .storage
-                .expect("there should be a storage")
-                .get_string("State")
-                .and_then(|s| ron::from_str(&s).ok())
-                .unwrap_or_default(),
+            state: eframe::get_value(
+                cc.storage.expect("there should be an eframe storage"),
+                "State",
+            )
+            .unwrap_or_default(),
 
             egui_texture_bind_group_layout,
             egui_texture,
@@ -609,8 +608,6 @@ impl eframe::App for App {
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        if let Ok(s) = ron::to_string(&self.state) {
-            storage.set_string("State", s);
-        }
+        eframe::set_value(storage, "State", &self.state)
     }
 }
