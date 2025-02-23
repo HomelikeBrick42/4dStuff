@@ -5,8 +5,10 @@ pub mod transform;
 
 pub use app::App;
 use eframe::egui;
+use serde::{Deserialize, Serialize};
 use transform::Transform;
 
+#[derive(Serialize, Deserialize)]
 struct Camera {
     pub position: cgmath::Vector4<f32>,
     pub xy_rotation: f32,
@@ -29,6 +31,7 @@ impl Camera {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 struct HyperSphere {
     pub name: String,
     pub ui_id: usize,

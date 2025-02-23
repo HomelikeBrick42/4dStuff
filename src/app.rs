@@ -2,6 +2,7 @@ use crate::{Camera, DrawUi, HyperSphere};
 use cgmath::InnerSpace;
 use eframe::{egui, wgpu};
 use encase::{ArrayLength, ShaderSize, ShaderType, StorageBuffer, UniformBuffer};
+use serde::{Deserialize, Serialize};
 
 #[derive(ShaderType)]
 struct GpuCamera {
@@ -31,25 +32,59 @@ struct GpuHyperSpheres<'a> {
     pub data: &'a [GpuHyperSphere],
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(default)]
+pub struct State {
+    camera: Camera,
+
+    sun_direction: cgmath::Vector4<f32>,
+    sun_color: cgmath::Vector3<f32>,
+    ambient_color: cgmath::Vector3<f32>,
+    up_sky_color: cgmath::Vector3<f32>,
+    down_sky_color: cgmath::Vector3<f32>,
+
+    hyper_spheres: Vec<HyperSphere>,
+    next_hyper_sphere_id: usize,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            camera: Camera {
+                position: cgmath::vec4(0.0, 0.0, 0.0, 0.0),
+                xy_rotation: 0.0,
+                xz_rotation: 0.0,
+                xw_rotation: 0.0,
+                yz_rotation: 0.0,
+                yw_rotation: 0.0,
+                zw_rotation: 0.0,
+            },
+
+            sun_direction: cgmath::vec4(-0.2, 0.1, 1.0, 0.0),
+            sun_color: cgmath::vec3(0.9, 0.8, 0.7),
+            ambient_color: cgmath::vec3(0.1, 0.1, 0.1),
+            up_sky_color: cgmath::vec3(0.5, 0.5, 0.9),
+            down_sky_color: cgmath::vec3(0.2, 0.2, 0.2),
+
+            hyper_spheres: vec![],
+            next_hyper_sphere_id: 0,
+        }
+    }
+}
+
 pub struct App {
     last_frame: Option<std::time::Instant>,
+
+    state: State,
 
     egui_texture_bind_group_layout: wgpu::BindGroupLayout,
     egui_texture: wgpu::Texture,
     egui_texture_bind_group: wgpu::BindGroup,
     egui_texture_id: egui::TextureId,
 
-    camera: Camera,
-    sun_direction: cgmath::Vector4<f32>,
-    sun_color: cgmath::Vector3<f32>,
-    ambient_color: cgmath::Vector3<f32>,
-    up_sky_color: cgmath::Vector3<f32>,
-    down_sky_color: cgmath::Vector3<f32>,
     camera_uniform_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
 
-    hyper_spheres: Vec<HyperSphere>,
-    next_hyper_sphere_id: usize,
     hyper_spheres_bind_group_layout: wgpu::BindGroupLayout,
     hyper_spheres_storage_buffer: wgpu::Buffer,
     hyper_spheres_bind_group: wgpu::BindGroup,
@@ -166,30 +201,21 @@ impl App {
         let mut this = Self {
             last_frame: None,
 
+            state: cc
+                .storage
+                .expect("there should be a storage")
+                .get_string("State")
+                .and_then(|s| ron::from_str(&s).ok())
+                .unwrap_or_default(),
+
             egui_texture_bind_group_layout,
             egui_texture,
             egui_texture_bind_group,
             egui_texture_id,
 
-            camera: Camera {
-                position: cgmath::vec4(0.0, 0.0, 0.0, 0.0),
-                xy_rotation: 0.0,
-                xz_rotation: 0.0,
-                xw_rotation: 0.0,
-                yz_rotation: 0.0,
-                yw_rotation: 0.0,
-                zw_rotation: 0.0,
-            },
-            sun_direction: cgmath::vec4(-0.2, 0.1, 1.0, 0.0),
-            sun_color: cgmath::vec3(0.9, 0.8, 0.7),
-            ambient_color: cgmath::vec3(0.1, 0.1, 0.1),
-            up_sky_color: cgmath::vec3(0.5, 0.5, 0.9),
-            down_sky_color: cgmath::vec3(0.2, 0.2, 0.2),
             camera_uniform_buffer,
             camera_bind_group,
 
-            hyper_spheres: vec![],
-            next_hyper_sphere_id: 0,
             hyper_spheres_bind_group_layout,
             hyper_spheres_storage_buffer,
             hyper_spheres_bind_group,
@@ -289,17 +315,17 @@ impl App {
             .write_buffer_with(&self.camera_uniform_buffer, 0, GpuCamera::SHADER_SIZE)
             .expect("the camera uniform buffer should be big enough to write a GpuCamera");
 
-        let transform = self.camera.get_transform().normalized();
+        let transform = self.state.camera.get_transform().normalized();
         let camera = GpuCamera {
             position: transform.transform(cgmath::vec4(0.0, 0.0, 0.0, 0.0)),
             forward: transform.transform_direction(cgmath::vec4(1.0, 0.0, 0.0, 0.0)),
             right: transform.transform_direction(cgmath::vec4(0.0, 1.0, 0.0, 0.0)),
             up: transform.transform_direction(cgmath::vec4(0.0, 0.0, 1.0, 0.0)),
-            sun_direction: self.sun_direction.normalize(),
-            sun_color: self.sun_color,
-            ambient_color: self.ambient_color,
-            up_sky_color: self.up_sky_color,
-            down_sky_color: self.down_sky_color,
+            sun_direction: self.state.sun_direction.normalize(),
+            sun_color: self.state.sun_color,
+            ambient_color: self.state.ambient_color,
+            up_sky_color: self.state.up_sky_color,
+            down_sky_color: self.state.down_sky_color,
             aspect: render_width as f32 / render_height as f32,
         };
         UniformBuffer::new(&mut *buffer)
@@ -311,6 +337,7 @@ impl App {
         let hyper_spheres = GpuHyperSpheres {
             length: ArrayLength,
             data: &self
+                .state
                 .hyper_spheres
                 .iter()
                 .map(
@@ -385,48 +412,56 @@ impl eframe::App for App {
         self.last_frame = Some(time);
 
         let mut camera_changed = false;
+        let mut hyper_spheres_changed = false;
+
         egui::Window::new("Settings").show(ctx, |ui| {
             ui.label(format!("Frame Time: {:.2}ms", dt.as_secs_f32() * 1000.0));
             ui.label(format!("FPS: {:.2}", 1.0 / dt.as_secs_f32()));
             ui.collapsing("Camera", |ui| {
-                camera_changed |= self.camera.draw_ui(ui);
+                camera_changed |= self.state.camera.draw_ui(ui);
             });
             ui.horizontal(|ui| {
                 ui.label("Sun Direction: ");
-                camera_changed |= self.sun_direction.draw_ui(ui);
+                camera_changed |= self.state.sun_direction.draw_ui(ui);
             });
             if ui.button("Normalise Sun Direction").clicked() {
-                self.sun_direction = self.sun_direction.normalize();
+                self.state.sun_direction = self.state.sun_direction.normalize();
                 camera_changed = true;
             }
             ui.horizontal(|ui| {
                 ui.label("Sun Color: ");
-                camera_changed |= ui.color_edit_button_rgb(self.sun_color.as_mut()).changed();
+                camera_changed |= ui
+                    .color_edit_button_rgb(self.state.sun_color.as_mut())
+                    .changed();
             });
             ui.horizontal(|ui| {
                 ui.label("Ambient Color: ");
                 camera_changed |= ui
-                    .color_edit_button_rgb(self.ambient_color.as_mut())
+                    .color_edit_button_rgb(self.state.ambient_color.as_mut())
                     .changed();
             });
             ui.horizontal(|ui| {
                 ui.label("Up Sky Color: ");
                 camera_changed |= ui
-                    .color_edit_button_rgb(self.up_sky_color.as_mut())
+                    .color_edit_button_rgb(self.state.up_sky_color.as_mut())
                     .changed();
             });
             ui.horizontal(|ui| {
                 ui.label("Down Sky Color: ");
                 camera_changed |= ui
-                    .color_edit_button_rgb(self.down_sky_color.as_mut())
+                    .color_edit_button_rgb(self.state.down_sky_color.as_mut())
                     .changed();
             });
+            if ui.button("RESET SCENE").clicked() {
+                self.state = State::default();
+                camera_changed = true;
+                hyper_spheres_changed = true;
+            }
         });
 
-        let mut hyper_spheres_changed = false;
         egui::Window::new("Hyper Spheres").show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
-                self.hyper_spheres.retain_mut(|hyper_sphere| {
+                self.state.hyper_spheres.retain_mut(|hyper_sphere| {
                     let mut deleted = false;
                     egui::CollapsingHeader::new(&hyper_sphere.name)
                         .id_salt(hyper_sphere.ui_id)
@@ -440,9 +475,9 @@ impl eframe::App for App {
                     !deleted
                 });
                 if ui.button("Add Hyper Sphere").clicked() {
-                    let id = self.next_hyper_sphere_id;
-                    self.next_hyper_sphere_id += 1;
-                    self.hyper_spheres.push(HyperSphere {
+                    let id = self.state.next_hyper_sphere_id;
+                    self.state.next_hyper_sphere_id += 1;
+                    self.state.hyper_spheres.push(HyperSphere {
                         name: "Default Hyper Sphere".into(),
                         ui_id: id,
                         position: cgmath::vec4(3.0, 0.0, 0.0, 0.0),
@@ -486,5 +521,11 @@ impl eframe::App for App {
             });
 
         ctx.request_repaint();
+    }
+
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        if let Ok(s) = ron::to_string(&self.state) {
+            storage.set_string("State", s);
+        }
     }
 }
