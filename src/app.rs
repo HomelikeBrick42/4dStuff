@@ -292,15 +292,9 @@ impl App {
         let transform = self.camera.get_transform().normalized();
         let camera = GpuCamera {
             position: transform.transform(cgmath::vec4(0.0, 0.0, 0.0, 0.0)),
-            forward: transform
-                .transform_direction(cgmath::vec4(1.0, 0.0, 0.0, 0.0))
-                .normalize(),
-            right: transform
-                .transform_direction(cgmath::vec4(0.0, 1.0, 0.0, 0.0))
-                .normalize(),
-            up: transform
-                .transform_direction(cgmath::vec4(0.0, 0.0, 1.0, 0.0))
-                .normalize(),
+            forward: transform.transform_direction(cgmath::vec4(1.0, 0.0, 0.0, 0.0)),
+            right: transform.transform_direction(cgmath::vec4(0.0, 1.0, 0.0, 0.0)),
+            up: transform.transform_direction(cgmath::vec4(0.0, 0.0, 1.0, 0.0)),
             sun_direction: self.sun_direction.normalize(),
             sun_color: self.sun_color,
             ambient_color: self.ambient_color,
