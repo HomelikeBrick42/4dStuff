@@ -50,9 +50,9 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
-            camera: Camera {
+            camera: Camera::Normal {
                 base_transform: Transform::IDENTITY,
-                extra_transform: Transform::IDENTITY,
+                vertical_look: 0.0,
             },
 
             sun_direction: cgmath::vec4(-0.2, 0.1, 1.0, 0.0),
@@ -488,95 +488,151 @@ impl eframe::App for App {
         if !ctx.wants_keyboard_input() {
             ctx.input(|i| {
                 let movement = 4.0 * ts;
-                let forward = cgmath::vec4(movement, 0.0, 0.0, 0.0);
-                let right = cgmath::vec4(0.0, movement, 0.0, 0.0);
-                let up = cgmath::vec4(0.0, 0.0, movement, 0.0);
-                let ana = cgmath::vec4(0.0, 0.0, 0.0, movement);
-
-                if i.key_down(egui::Key::W) {
-                    self.state.camera.base_transform =
-                        self.state.camera.base_transform * Transform::translation(forward);
-                    camera_changed = true;
-                }
-                if i.key_down(egui::Key::S) {
-                    self.state.camera.base_transform =
-                        self.state.camera.base_transform * Transform::translation(-forward);
-                    camera_changed = true;
-                }
-                if i.key_down(egui::Key::A) {
-                    self.state.camera.base_transform =
-                        self.state.camera.base_transform * Transform::translation(-right);
-                    camera_changed = true;
-                }
-                if i.key_down(egui::Key::D) {
-                    self.state.camera.base_transform =
-                        self.state.camera.base_transform * Transform::translation(right);
-                    camera_changed = true;
-                }
-                if i.key_down(egui::Key::Q) {
-                    self.state.camera.base_transform =
-                        self.state.camera.base_transform * Transform::translation(-up);
-                    camera_changed = true;
-                }
-                if i.key_down(egui::Key::E) {
-                    self.state.camera.base_transform =
-                        self.state.camera.base_transform * Transform::translation(up);
-                    camera_changed = true;
-                }
-                if i.key_down(egui::Key::R) {
-                    self.state.camera.base_transform =
-                        self.state.camera.base_transform * Transform::translation(ana);
-                    camera_changed = true;
-                }
-                if i.key_down(egui::Key::F) {
-                    self.state.camera.base_transform =
-                        self.state.camera.base_transform * Transform::translation(-ana);
-                    camera_changed = true;
-                }
-
                 let rotation = std::f32::consts::FRAC_PI_2 * ts;
 
-                if i.modifiers.shift {
-                    if i.key_down(egui::Key::ArrowUp) {
-                        self.state.camera.base_transform =
-                            self.state.camera.base_transform * Transform::rotation_xw(rotation);
-                        camera_changed = true;
+                match &mut self.state.camera {
+                    Camera::Normal {
+                        base_transform,
+                        vertical_look,
+                    } => {
+                        let forward = cgmath::vec4(movement, 0.0, 0.0, 0.0);
+                        let right = cgmath::vec4(0.0, movement, 0.0, 0.0);
+                        let up = cgmath::vec4(0.0, 0.0, movement, 0.0);
+                        let ana = cgmath::vec4(0.0, 0.0, 0.0, movement);
+
+                        if i.key_down(egui::Key::W) {
+                            *base_transform = *base_transform * Transform::translation(forward);
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::S) {
+                            *base_transform = *base_transform * Transform::translation(-forward);
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::A) {
+                            *base_transform = *base_transform * Transform::translation(-right);
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::D) {
+                            *base_transform = *base_transform * Transform::translation(right);
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::Q) {
+                            *base_transform = *base_transform * Transform::translation(-up);
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::E) {
+                            *base_transform = *base_transform * Transform::translation(up);
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::R) {
+                            *base_transform = *base_transform * Transform::translation(ana);
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::F) {
+                            *base_transform = *base_transform * Transform::translation(-ana);
+                            camera_changed = true;
+                        }
+
+                        if i.modifiers.shift {
+                            if i.key_down(egui::Key::ArrowUp) {
+                                *base_transform =
+                                    *base_transform * Transform::rotation_xw(rotation);
+                                camera_changed = true;
+                            }
+                            if i.key_down(egui::Key::ArrowDown) {
+                                *base_transform =
+                                    *base_transform * Transform::rotation_xw(-rotation);
+                                camera_changed = true;
+                            }
+                            if i.key_down(egui::Key::ArrowLeft) {
+                                *base_transform =
+                                    *base_transform * Transform::rotation_yw(-rotation);
+                                camera_changed = true;
+                            }
+                            if i.key_down(egui::Key::ArrowRight) {
+                                *base_transform =
+                                    *base_transform * Transform::rotation_yw(rotation);
+                                camera_changed = true;
+                            }
+                        } else {
+                            if i.key_down(egui::Key::ArrowUp) {
+                                *vertical_look += rotation;
+                                camera_changed = true;
+                            }
+                            if i.key_down(egui::Key::ArrowDown) {
+                                *vertical_look -= rotation;
+                                camera_changed = true;
+                            }
+                            if i.key_down(egui::Key::ArrowLeft) {
+                                *base_transform =
+                                    *base_transform * Transform::rotation_xy(-rotation);
+                                camera_changed = true;
+                            }
+                            if i.key_down(egui::Key::ArrowRight) {
+                                *base_transform =
+                                    *base_transform * Transform::rotation_xy(rotation);
+                                camera_changed = true;
+                            }
+                        }
                     }
-                    if i.key_down(egui::Key::ArrowDown) {
-                        self.state.camera.base_transform =
-                            self.state.camera.base_transform * Transform::rotation_xw(-rotation);
-                        camera_changed = true;
-                    }
-                    if i.key_down(egui::Key::ArrowLeft) {
-                        self.state.camera.base_transform =
-                            self.state.camera.base_transform * Transform::rotation_yw(-rotation);
-                        camera_changed = true;
-                    }
-                    if i.key_down(egui::Key::ArrowRight) {
-                        self.state.camera.base_transform =
-                            self.state.camera.base_transform * Transform::rotation_yw(rotation);
-                        camera_changed = true;
-                    }
-                } else {
-                    if i.key_down(egui::Key::ArrowUp) {
-                        self.state.camera.extra_transform =
-                            self.state.camera.extra_transform * Transform::rotation_xz(rotation);
-                        camera_changed = true;
-                    }
-                    if i.key_down(egui::Key::ArrowDown) {
-                        self.state.camera.extra_transform =
-                            self.state.camera.extra_transform * Transform::rotation_xz(-rotation);
-                        camera_changed = true;
-                    }
-                    if i.key_down(egui::Key::ArrowLeft) {
-                        self.state.camera.base_transform =
-                            self.state.camera.base_transform * Transform::rotation_xy(-rotation);
-                        camera_changed = true;
-                    }
-                    if i.key_down(egui::Key::ArrowRight) {
-                        self.state.camera.base_transform =
-                            self.state.camera.base_transform * Transform::rotation_xy(rotation);
-                        camera_changed = true;
+
+                    Camera::Volume { transform } => {
+                        let forward = cgmath::vec4(movement, 0.0, 0.0, 0.0);
+                        let right = cgmath::vec4(0.0, movement, 0.0, 0.0);
+                        let up = cgmath::vec4(0.0, 0.0, 0.0, movement);
+
+                        if i.key_down(egui::Key::W) {
+                            *transform = *transform * Transform::translation(forward);
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::S) {
+                            *transform = *transform * Transform::translation(-forward);
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::A) {
+                            *transform = *transform * Transform::translation(-right);
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::D) {
+                            *transform = *transform * Transform::translation(right);
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::Q) {
+                            *transform = *transform * Transform::translation(-up);
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::E) {
+                            *transform = *transform * Transform::translation(up);
+                            camera_changed = true;
+                        }
+
+                        if i.modifiers.shift {
+                            if i.key_down(egui::Key::ArrowLeft) {
+                                *transform = *transform * Transform::rotation_yw(rotation);
+                                camera_changed = true;
+                            }
+                            if i.key_down(egui::Key::ArrowRight) {
+                                *transform = *transform * Transform::rotation_yw(-rotation);
+                                camera_changed = true;
+                            }
+                        } else {
+                            if i.key_down(egui::Key::ArrowUp) {
+                                *transform = *transform * Transform::rotation_xw(rotation);
+                                camera_changed = true;
+                            }
+                            if i.key_down(egui::Key::ArrowDown) {
+                                *transform = *transform * Transform::rotation_xw(-rotation);
+                                camera_changed = true;
+                            }
+                            if i.key_down(egui::Key::ArrowLeft) {
+                                *transform = *transform * Transform::rotation_xy(-rotation);
+                                camera_changed = true;
+                            }
+                            if i.key_down(egui::Key::ArrowRight) {
+                                *transform = *transform * Transform::rotation_xy(rotation);
+                                camera_changed = true;
+                            }
+                        }
                     }
                 }
             });

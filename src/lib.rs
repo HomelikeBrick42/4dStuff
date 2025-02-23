@@ -9,14 +9,27 @@ use serde::{Deserialize, Serialize};
 use transform::Transform;
 
 #[derive(Serialize, Deserialize)]
-struct Camera {
-    pub base_transform: Transform,
-    pub extra_transform: Transform,
+enum Camera {
+    Normal {
+        base_transform: Transform,
+        vertical_look: f32,
+    },
+    Volume {
+        transform: Transform,
+    },
 }
 
 impl Camera {
     pub fn get_transform(&self) -> Transform {
-        self.base_transform * self.extra_transform
+        match *self {
+            Self::Normal {
+                base_transform,
+                vertical_look,
+            } => base_transform * Transform::rotation_xz(vertical_look),
+            Self::Volume { transform } => {
+                transform * Transform::rotation_zw(std::f32::consts::FRAC_PI_2)
+            }
+        }
     }
 }
 
@@ -65,7 +78,14 @@ impl DrawUi for Camera {
             ui.label("Position: ");
             if position.draw_ui(ui) {
                 let difference = position - old_position;
-                self.base_transform = Transform::translation(difference) * self.base_transform;
+                let transform = match self {
+                    Self::Normal {
+                        base_transform: transform,
+                        vertical_look: _,
+                    }
+                    | Self::Volume { transform } => transform,
+                };
+                *transform = Transform::translation(difference) * *transform;
                 changed = true;
             }
         });
@@ -93,10 +113,71 @@ impl DrawUi for Camera {
             });
         });
 
+        let volume_enabled = match self {
+            Camera::Normal {
+                base_transform: _,
+                vertical_look,
+            } => *vertical_look == 0.0,
+            Camera::Volume { transform: _ } => true,
+        };
+
         if ui.button("Reset Rotation").clicked() {
-            self.base_transform = Transform::translation(position);
-            self.extra_transform = Transform::IDENTITY;
+            let transform = match self {
+                Camera::Normal {
+                    base_transform,
+                    vertical_look,
+                } => {
+                    *vertical_look = 0.0;
+                    base_transform
+                }
+                Camera::Volume { transform } => transform,
+            };
+            *transform = Transform::translation(position);
             changed = true;
+        }
+
+        ui.horizontal(|ui| {
+            ui.label("Volume View: ");
+
+            let mut volume = matches!(self, Self::Volume { .. });
+            ui.add_enabled_ui(volume_enabled, |ui| {
+                if ui.checkbox(&mut volume, "").clicked() {
+                    match *self {
+                        Camera::Normal {
+                            base_transform,
+                            vertical_look: _,
+                        } if volume => {
+                            *self = Camera::Volume {
+                                transform: base_transform,
+                            };
+                        }
+
+                        Camera::Volume { transform } if !volume => {
+                            *self = Camera::Normal {
+                                base_transform: transform,
+                                vertical_look: 0.0,
+                            };
+                        }
+
+                        _ => {}
+                    };
+                    changed = true;
+                }
+            });
+        });
+
+        if let Self::Normal {
+            base_transform: _,
+            vertical_look,
+        } = self
+        {
+            ui.horizontal(|ui| {
+                ui.label("Vertical Angle: ");
+                changed |= ui.drag_angle(vertical_look).changed();
+            });
+            if !volume_enabled {
+                ui.label("Volume View cannot be enabled if the vertical angle is not exactly 0");
+            }
         }
 
         changed
