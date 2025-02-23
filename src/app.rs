@@ -315,7 +315,7 @@ impl App {
             .write_buffer_with(&self.camera_uniform_buffer, 0, GpuCamera::SHADER_SIZE)
             .expect("the camera uniform buffer should be big enough to write a GpuCamera");
 
-        let transform = self.state.camera.get_transform().normalized();
+        let transform = self.state.camera.get_transform();
         let camera = GpuCamera {
             position: transform.transform(cgmath::vec4(0.0, 0.0, 0.0, 0.0)),
             forward: transform.transform_direction(cgmath::vec4(1.0, 0.0, 0.0, 0.0)),
@@ -411,12 +411,14 @@ impl eframe::App for App {
         let dt = time.duration_since(self.last_frame.unwrap_or(time));
         self.last_frame = Some(time);
 
+        let ts = dt.as_secs_f32();
+
         let mut camera_changed = false;
         let mut hyper_spheres_changed = false;
 
         egui::Window::new("Settings").show(ctx, |ui| {
-            ui.label(format!("Frame Time: {:.2}ms", dt.as_secs_f32() * 1000.0));
-            ui.label(format!("FPS: {:.2}", 1.0 / dt.as_secs_f32()));
+            ui.label(format!("Frame Time: {:.2}ms", dt.as_secs_f64() * 1000.0));
+            ui.label(format!("FPS: {:.2}", 1.0 / dt.as_secs_f64()));
             ui.collapsing("Camera", |ui| {
                 camera_changed |= self.state.camera.draw_ui(ui);
             });
@@ -488,6 +490,89 @@ impl eframe::App for App {
                 }
             });
         });
+
+        if !ctx.wants_keyboard_input() {
+            ctx.input(|i| {
+                let transform = self.state.camera.get_transform();
+                let forward = transform.transform_direction(cgmath::vec4(1.0, 0.0, 0.0, 0.0));
+                let right = transform.transform_direction(cgmath::vec4(0.0, 1.0, 0.0, 0.0));
+                let up = transform.transform_direction(cgmath::vec4(0.0, 0.0, 1.0, 0.0));
+                let ana = transform.transform_direction(cgmath::vec4(0.0, 0.0, 0.0, 1.0));
+
+                let movement = 2.0 * ts;
+
+                if i.key_down(egui::Key::W) {
+                    self.state.camera.position += forward * movement;
+                    camera_changed = true;
+                }
+                if i.key_down(egui::Key::S) {
+                    self.state.camera.position -= forward * movement;
+                    camera_changed = true;
+                }
+                if i.key_down(egui::Key::A) {
+                    self.state.camera.position -= right * movement;
+                    camera_changed = true;
+                }
+                if i.key_down(egui::Key::D) {
+                    self.state.camera.position += right * movement;
+                    camera_changed = true;
+                }
+                if i.key_down(egui::Key::Q) {
+                    self.state.camera.position -= up * movement;
+                    camera_changed = true;
+                }
+                if i.key_down(egui::Key::E) {
+                    self.state.camera.position += up * movement;
+                    camera_changed = true;
+                }
+                if i.key_down(egui::Key::R) {
+                    self.state.camera.position += ana * movement;
+                    camera_changed = true;
+                }
+                if i.key_down(egui::Key::F) {
+                    self.state.camera.position -= ana * movement;
+                    camera_changed = true;
+                }
+
+                let rotation = std::f32::consts::FRAC_PI_2 * ts;
+
+                if i.modifiers.shift {
+                    if i.key_down(egui::Key::ArrowUp) {
+                        self.state.camera.xw_rotation += rotation;
+                        camera_changed = true;
+                    }
+                    if i.key_down(egui::Key::ArrowDown) {
+                        self.state.camera.xw_rotation -= rotation;
+                        camera_changed = true;
+                    }
+                    if i.key_down(egui::Key::ArrowLeft) {
+                        self.state.camera.yw_rotation -= rotation;
+                        camera_changed = true;
+                    }
+                    if i.key_down(egui::Key::ArrowRight) {
+                        self.state.camera.yw_rotation += rotation;
+                        camera_changed = true;
+                    }
+                } else {
+                    if i.key_down(egui::Key::ArrowUp) {
+                        self.state.camera.xz_rotation += rotation;
+                        camera_changed = true;
+                    }
+                    if i.key_down(egui::Key::ArrowDown) {
+                        self.state.camera.xz_rotation -= rotation;
+                        camera_changed = true;
+                    }
+                    if i.key_down(egui::Key::ArrowLeft) {
+                        self.state.camera.xy_rotation -= rotation;
+                        camera_changed = true;
+                    }
+                    if i.key_down(egui::Key::ArrowRight) {
+                        self.state.camera.xy_rotation += rotation;
+                        camera_changed = true;
+                    }
+                }
+            });
+        }
 
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(255, 0, 255)))
