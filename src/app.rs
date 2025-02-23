@@ -413,6 +413,37 @@ impl eframe::App for App {
         egui::Window::new("Settings").show(ctx, |ui| {
             ui.label(format!("Frame Time: {:.2}ms", dt.as_secs_f64() * 1000.0));
             ui.label(format!("FPS: {:.2}", 1.0 / dt.as_secs_f64()));
+            ui.collapsing("Camera", |ui| {
+                ui.add_enabled_ui(false, |ui| {
+                    let transform = self.state.camera.get_transform();
+                    let mut position = transform.transform(cgmath::vec4(0.0, 0.0, 0.0, 0.0));
+                    let mut forward =
+                        transform.transform_direction(cgmath::vec4(1.0, 0.0, 0.0, 0.0));
+                    let mut right = transform.transform_direction(cgmath::vec4(0.0, 1.0, 0.0, 0.0));
+                    let mut up = transform.transform_direction(cgmath::vec4(0.0, 0.0, 1.0, 0.0));
+                    let mut ana = transform.transform_direction(cgmath::vec4(0.0, 0.0, 0.0, 1.0));
+                    ui.horizontal(|ui| {
+                        ui.label("Position: ");
+                        position.draw_ui(ui);
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Forward: ");
+                        forward.draw_ui(ui);
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Right: ");
+                        right.draw_ui(ui);
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Up: ");
+                        up.draw_ui(ui);
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Ana: ");
+                        ana.draw_ui(ui);
+                    });
+                });
+            });
             ui.horizontal(|ui| {
                 ui.label("Sun Direction: ");
                 camera_changed |= self.state.sun_direction.draw_ui(ui);
