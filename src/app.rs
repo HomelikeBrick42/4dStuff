@@ -414,48 +414,7 @@ impl eframe::App for App {
             ui.label(format!("Frame Time: {:.2}ms", dt.as_secs_f64() * 1000.0));
             ui.label(format!("FPS: {:.2}", 1.0 / dt.as_secs_f64()));
             ui.collapsing("Camera", |ui| {
-                let transform = self.state.camera.get_transform();
-                let mut position = transform.transform(cgmath::vec4(0.0, 0.0, 0.0, 0.0));
-                let old_position = position;
-                ui.horizontal(|ui| {
-                    ui.label("Position: ");
-                    if position.draw_ui(ui) {
-                        let difference = position - old_position;
-                        self.state.camera.base_transform =
-                            Transform::translation(difference) * self.state.camera.base_transform;
-                        camera_changed = true;
-                    }
-                });
-
-                ui.add_enabled_ui(false, |ui| {
-                    let mut forward =
-                        transform.transform_direction(cgmath::vec4(1.0, 0.0, 0.0, 0.0));
-                    let mut right = transform.transform_direction(cgmath::vec4(0.0, 1.0, 0.0, 0.0));
-                    let mut up = transform.transform_direction(cgmath::vec4(0.0, 0.0, 1.0, 0.0));
-                    let mut ana = transform.transform_direction(cgmath::vec4(0.0, 0.0, 0.0, 1.0));
-                    ui.horizontal(|ui| {
-                        ui.label("Forward: ");
-                        forward.draw_ui(ui);
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("Right: ");
-                        right.draw_ui(ui);
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("Up: ");
-                        up.draw_ui(ui);
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("Ana: ");
-                        ana.draw_ui(ui);
-                    });
-                });
-
-                if ui.button("Reset Rotation").clicked() {
-                    self.state.camera.base_transform = Transform::translation(position);
-                    self.state.camera.extra_transform = Transform::IDENTITY;
-                    camera_changed = true;
-                }
+                camera_changed |= self.state.camera.draw_ui(ui);
             });
             ui.horizontal(|ui| {
                 ui.label("Sun Direction: ");

@@ -54,6 +54,55 @@ impl DrawUi for cgmath::Vector4<f32> {
     }
 }
 
+impl DrawUi for Camera {
+    fn draw_ui(&mut self, ui: &mut egui::Ui) -> bool {
+        let mut changed = false;
+
+        let transform = self.get_transform();
+        let mut position = transform.transform(cgmath::vec4(0.0, 0.0, 0.0, 0.0));
+        let old_position = position;
+        ui.horizontal(|ui| {
+            ui.label("Position: ");
+            if position.draw_ui(ui) {
+                let difference = position - old_position;
+                self.base_transform = Transform::translation(difference) * self.base_transform;
+                changed = true;
+            }
+        });
+
+        ui.add_enabled_ui(false, |ui| {
+            let mut forward = transform.transform_direction(cgmath::vec4(1.0, 0.0, 0.0, 0.0));
+            let mut right = transform.transform_direction(cgmath::vec4(0.0, 1.0, 0.0, 0.0));
+            let mut up = transform.transform_direction(cgmath::vec4(0.0, 0.0, 1.0, 0.0));
+            let mut ana = transform.transform_direction(cgmath::vec4(0.0, 0.0, 0.0, 1.0));
+            ui.horizontal(|ui| {
+                ui.label("Forward: ");
+                forward.draw_ui(ui);
+            });
+            ui.horizontal(|ui| {
+                ui.label("Right: ");
+                right.draw_ui(ui);
+            });
+            ui.horizontal(|ui| {
+                ui.label("Up: ");
+                up.draw_ui(ui);
+            });
+            ui.horizontal(|ui| {
+                ui.label("Ana: ");
+                ana.draw_ui(ui);
+            });
+        });
+
+        if ui.button("Reset Rotation").clicked() {
+            self.base_transform = Transform::translation(position);
+            self.extra_transform = Transform::IDENTITY;
+            changed = true;
+        }
+
+        changed
+    }
+}
+
 impl DrawUi for HyperSphere {
     fn draw_ui(&mut self, ui: &mut egui::Ui) -> bool {
         let mut changed = false;
