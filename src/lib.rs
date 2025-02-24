@@ -1,6 +1,7 @@
-#![deny(rust_2018_idioms)]
+#![deny(elided_lifetimes_in_paths)]
 
 mod app;
+pub mod gpu_buffer;
 pub mod rotor;
 
 pub use app::App;

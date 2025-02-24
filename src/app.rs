@@ -1,7 +1,7 @@
-use crate::{Camera, CameraMode, DrawUi, HyperSphere, rotor::Rotor};
+use crate::{Camera, CameraMode, DrawUi, HyperSphere, gpu_buffer::GpuBuffer, rotor::Rotor};
 use cgmath::InnerSpace;
 use eframe::{egui, wgpu};
-use encase::{ArrayLength, ShaderSize, ShaderType, StorageBuffer, UniformBuffer};
+use encase::{ShaderSize, ShaderType};
 use serde::{Deserialize, Serialize};
 
 #[derive(ShaderType)]
@@ -23,13 +23,6 @@ struct GpuHyperSphere {
     pub position: cgmath::Vector4<f32>,
     pub color: cgmath::Vector3<f32>,
     pub radius: f32,
-}
-
-#[derive(ShaderType)]
-struct GpuHyperSpheres<'a> {
-    pub length: ArrayLength,
-    #[size(runtime)]
-    pub data: &'a [GpuHyperSphere],
 }
 
 #[derive(Serialize, Deserialize)]
@@ -80,11 +73,11 @@ pub struct App {
     egui_texture_bind_group: wgpu::BindGroup,
     egui_texture_id: egui::TextureId,
 
-    camera_uniform_buffer: wgpu::Buffer,
+    camera_buffer: GpuBuffer<GpuCamera, false>,
     camera_bind_group: wgpu::BindGroup,
 
     hyper_spheres_bind_group_layout: wgpu::BindGroupLayout,
-    hyper_spheres_storage_buffer: wgpu::Buffer,
+    hyper_spheres_buffer: GpuBuffer<GpuHyperSphere, true>,
     hyper_spheres_bind_group: wgpu::BindGroup,
 
     ray_tracing_pipeline: wgpu::ComputePipeline,
@@ -92,6 +85,12 @@ pub struct App {
 
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>) -> anyhow::Result<Self> {
+        let state: State = eframe::get_value(
+            cc.storage.expect("there should be an eframe storage"),
+            "State",
+        )
+        .unwrap_or_default();
+
         let eframe::egui_wgpu::RenderState {
             device,
             queue,
@@ -138,18 +137,19 @@ impl App {
                     count: None,
                 }],
             });
-        let camera_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Camera Uniform Buffer"),
-            size: GpuCamera::SHADER_SIZE.get(),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let camera_buffer = GpuBuffer::new(
+            device,
+            queue,
+            "Camera Buffer",
+            wgpu::BufferUsages::UNIFORM,
+            &Self::get_gpu_camera(&state, 1.0),
+        );
         let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Camera Bind Group"),
             layout: &camera_bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: camera_uniform_buffer.as_entire_binding(),
+                resource: camera_buffer.get_buffer().as_entire_binding(),
             }],
         });
 
@@ -162,17 +162,27 @@ impl App {
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { read_only: true },
                         has_dynamic_offset: false,
-                        min_binding_size: Some(GpuHyperSpheres::min_size()),
+                        min_binding_size: None,
                     },
                     count: None,
                 }],
             });
-        let (hyper_spheres_storage_buffer, hyper_spheres_bind_group) =
-            Self::hyper_spheres_storage_buffer(
-                device,
-                GpuHyperSpheres::min_size().get(),
-                &hyper_spheres_bind_group_layout,
-            );
+        let hyper_spheres_buffer = GpuBuffer::new_slice(
+            device,
+            queue,
+            "Hyper Spheres Buffer",
+            wgpu::BufferUsages::STORAGE,
+            &state
+                .hyper_spheres
+                .iter()
+                .map(Self::hyper_sphere_to_gpu)
+                .collect::<Vec<_>>(),
+        );
+        let hyper_spheres_bind_group = Self::hyper_spheres_bind_group(
+            device,
+            &hyper_spheres_buffer,
+            &hyper_spheres_bind_group_layout,
+        );
 
         let ray_tracing_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -196,35 +206,25 @@ impl App {
                 cache: None,
             });
 
-        let mut this = Self {
+        Ok(Self {
             last_frame: None,
 
-            state: eframe::get_value(
-                cc.storage.expect("there should be an eframe storage"),
-                "State",
-            )
-            .unwrap_or_default(),
+            state,
 
             egui_texture_bind_group_layout,
             egui_texture,
             egui_texture_bind_group,
             egui_texture_id,
 
-            camera_uniform_buffer,
+            camera_buffer,
             camera_bind_group,
 
             hyper_spheres_bind_group_layout,
-            hyper_spheres_storage_buffer,
+            hyper_spheres_buffer,
             hyper_spheres_bind_group,
 
             ray_tracing_pipeline,
-        };
-
-        this.update_camera(queue);
-        this.update_hyper_spheres(device, queue);
-        queue.submit(std::iter::empty());
-
-        Ok(this)
+        })
     }
 
     fn egui_texture(
@@ -259,26 +259,19 @@ impl App {
         (egui_texture, egui_texture_view, egui_texture_bind_group)
     }
 
-    fn hyper_spheres_storage_buffer(
+    fn hyper_spheres_bind_group(
         device: &wgpu::Device,
-        size: u64,
+        hyper_spheres_buffer: &GpuBuffer<GpuHyperSphere, true>,
         hyper_spheres_bind_group_layout: &wgpu::BindGroupLayout,
-    ) -> (wgpu::Buffer, wgpu::BindGroup) {
-        let hyper_spheres_storage_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Hyper Spheres Storage Buffer"),
-            size,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let hyper_spheres_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+    ) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Hyper Spheres Bind Group"),
             layout: hyper_spheres_bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: hyper_spheres_storage_buffer.as_entire_binding(),
+                resource: hyper_spheres_buffer.get_buffer().as_entire_binding(),
             }],
-        });
-        (hyper_spheres_storage_buffer, hyper_spheres_bind_group)
+        })
     }
 
     fn resize(&mut self, width: u32, height: u32, render_state: &eframe::egui_wgpu::RenderState) {
@@ -305,72 +298,35 @@ impl App {
         );
     }
 
-    fn update_camera(&self, queue: &wgpu::Queue) {
-        let (render_width, render_height) = (self.egui_texture.width(), self.egui_texture.height());
-
-        let mut buffer = queue
-            .write_buffer_with(&self.camera_uniform_buffer, 0, GpuCamera::SHADER_SIZE)
-            .expect("the camera uniform buffer should be big enough to write a GpuCamera");
-
-        let rotation = self.state.camera.get_rotation();
-        let camera = GpuCamera {
-            position: self.state.camera.position,
+    fn get_gpu_camera(state: &State, aspect: f32) -> GpuCamera {
+        let rotation = state.camera.get_rotation();
+        GpuCamera {
+            position: state.camera.position,
             forward: rotation.rotate(cgmath::vec4(1.0, 0.0, 0.0, 0.0)),
             right: rotation.rotate(cgmath::vec4(0.0, 1.0, 0.0, 0.0)),
             up: rotation.rotate(cgmath::vec4(0.0, 0.0, 1.0, 0.0)),
-            sun_direction: self.state.sun_direction.normalize(),
-            sun_color: self.state.sun_color,
-            ambient_color: self.state.ambient_color,
-            up_sky_color: self.state.up_sky_color,
-            down_sky_color: self.state.down_sky_color,
-            aspect: render_width as f32 / render_height as f32,
-        };
-        UniformBuffer::new(&mut *buffer)
-            .write(&camera)
-            .expect("the buffer should be big enough to write a GpuCamera");
+            sun_direction: state.sun_direction.normalize(),
+            sun_color: state.sun_color,
+            ambient_color: state.ambient_color,
+            up_sky_color: state.up_sky_color,
+            down_sky_color: state.down_sky_color,
+            aspect,
+        }
     }
 
-    fn update_hyper_spheres(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        let hyper_spheres = GpuHyperSpheres {
-            length: ArrayLength,
-            data: &self
-                .state
-                .hyper_spheres
-                .iter()
-                .map(
-                    |&HyperSphere {
-                         name: _,
-                         ui_id: _,
-                         position,
-                         radius,
-                         color,
-                     }| GpuHyperSphere {
-                        position,
-                        color,
-                        radius,
-                    },
-                )
-                .collect::<Vec<_>>(),
-        };
-
-        let size = hyper_spheres.size();
-        if size.get() > self.hyper_spheres_storage_buffer.size() {
-            (
-                self.hyper_spheres_storage_buffer,
-                self.hyper_spheres_bind_group,
-            ) = Self::hyper_spheres_storage_buffer(
-                device,
-                size.get(),
-                &self.hyper_spheres_bind_group_layout,
-            );
+    fn hyper_sphere_to_gpu(hyper_sphere: &HyperSphere) -> GpuHyperSphere {
+        let HyperSphere {
+            name: _,
+            ui_id: _,
+            position,
+            radius,
+            color,
+        } = *hyper_sphere;
+        GpuHyperSphere {
+            position,
+            color,
+            radius,
         }
-
-        let mut buffer = queue
-            .write_buffer_with(&self.hyper_spheres_storage_buffer, 0, size)
-            .expect("the hyper spheres storage buffer should be big enough to write the GpuHyperSpheres");
-        StorageBuffer::new(&mut *buffer)
-            .write(&hyper_spheres)
-            .expect("the buffer should be big enough to write a GpuHyperSpheres");
     }
 
     fn render(&self, device: &wgpu::Device, queue: &wgpu::Queue) {
@@ -636,11 +592,32 @@ impl eframe::App for App {
                 }
 
                 if camera_changed {
-                    self.update_camera(queue);
+                    self.camera_buffer.write(
+                        queue,
+                        &Self::get_gpu_camera(&self.state, width as f32 / height as f32),
+                    );
                 }
+
                 if hyper_spheres_changed {
-                    self.update_hyper_spheres(device, queue);
+                    let resized = self.hyper_spheres_buffer.write(
+                        device,
+                        queue,
+                        &self
+                            .state
+                            .hyper_spheres
+                            .iter()
+                            .map(Self::hyper_sphere_to_gpu)
+                            .collect::<Vec<_>>(),
+                    );
+                    if resized {
+                        self.hyper_spheres_bind_group = Self::hyper_spheres_bind_group(
+                            device,
+                            &self.hyper_spheres_buffer,
+                            &self.hyper_spheres_bind_group_layout,
+                        );
+                    }
                 }
+
                 self.render(device, queue);
 
                 ui.painter().image(
