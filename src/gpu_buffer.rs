@@ -101,7 +101,7 @@ impl<T: ShaderSize + WriteInto> GpuBuffer<T, true> {
             }),
             _element: PhantomData,
         };
-        debug_assert!(!this.write(device, queue, data));
+        assert!(!this.write(device, queue, data));
         this
     }
 
