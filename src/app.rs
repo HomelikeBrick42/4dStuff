@@ -51,7 +51,7 @@ impl Default for State {
                 volume_view_percentage: 0.0,
             },
 
-            sun_direction: cgmath::vec4(-0.2, 0.1, 1.0, 0.0),
+            sun_direction: cgmath::vec4(-0.2, 1.0, 0.1, 0.0),
             sun_color: cgmath::vec3(0.9, 0.8, 0.7),
             ambient_color: cgmath::vec3(0.1, 0.1, 0.1),
             up_sky_color: cgmath::vec3(0.5, 0.5, 0.9),
@@ -302,9 +302,9 @@ impl App {
         let rotation = state.camera.get_rotation();
         GpuCamera {
             position: state.camera.position,
-            forward: rotation.rotate(cgmath::vec4(1.0, 0.0, 0.0, 0.0)),
-            right: rotation.rotate(cgmath::vec4(0.0, 1.0, 0.0, 0.0)),
-            up: rotation.rotate(cgmath::vec4(0.0, 0.0, 1.0, 0.0)),
+            forward: rotation.rotate(Camera::FORWARD),
+            right: rotation.rotate(Camera::RIGHT),
+            up: rotation.rotate(Camera::UP),
             sun_direction: state.sun_direction.normalize(),
             sun_color: state.sun_color,
             ambient_color: state.ambient_color,
@@ -450,10 +450,10 @@ impl eframe::App for App {
                 let rotation_amount = std::f32::consts::FRAC_PI_2 * ts;
 
                 let rotation = self.state.camera.get_rotation();
-                let forward = rotation.rotate(cgmath::vec4(movement_amount, 0.0, 0.0, 0.0));
-                let right = rotation.rotate(cgmath::vec4(0.0, movement_amount, 0.0, 0.0));
-                let up = rotation.rotate(cgmath::vec4(0.0, 0.0, movement_amount, 0.0));
-                let ana = rotation.rotate(cgmath::vec4(0.0, 0.0, 0.0, movement_amount));
+                let forward = rotation.rotate(Camera::FORWARD * movement_amount);
+                let right = rotation.rotate(Camera::RIGHT * movement_amount);
+                let up = rotation.rotate(Camera::UP * movement_amount);
+                let ana = rotation.rotate(Camera::ANA * movement_amount);
 
                 if i.key_down(egui::Key::W) {
                     self.state.camera.position += forward;
@@ -503,12 +503,12 @@ impl eframe::App for App {
                         }
                         if i.key_down(egui::Key::ArrowLeft) {
                             self.state.camera.base_rotation = self.state.camera.base_rotation
-                                * Rotor::rotation_yw(-rotation_amount);
+                                * Rotor::rotation_zw(-rotation_amount);
                             camera_changed = true;
                         }
                         if i.key_down(egui::Key::ArrowRight) {
                             self.state.camera.base_rotation = self.state.camera.base_rotation
-                                * Rotor::rotation_yw(rotation_amount);
+                                * Rotor::rotation_zw(rotation_amount);
                             camera_changed = true;
                         }
                     } else {
@@ -522,12 +522,12 @@ impl eframe::App for App {
                         }
                         if i.key_down(egui::Key::ArrowLeft) {
                             self.state.camera.base_rotation = self.state.camera.base_rotation
-                                * Rotor::rotation_xy(-rotation_amount);
+                                * Rotor::rotation_xz(-rotation_amount);
                             camera_changed = true;
                         }
                         if i.key_down(egui::Key::ArrowRight) {
                             self.state.camera.base_rotation = self.state.camera.base_rotation
-                                * Rotor::rotation_xy(rotation_amount);
+                                * Rotor::rotation_xz(rotation_amount);
                             camera_changed = true;
                         }
                     }
@@ -535,12 +535,12 @@ impl eframe::App for App {
                     if i.modifiers.shift {
                         if i.key_down(egui::Key::ArrowLeft) {
                             self.state.camera.base_rotation = self.state.camera.base_rotation
-                                * Rotor::rotation_yw(rotation_amount);
+                                * Rotor::rotation_zw(rotation_amount);
                             camera_changed = true;
                         }
                         if i.key_down(egui::Key::ArrowRight) {
                             self.state.camera.base_rotation = self.state.camera.base_rotation
-                                * Rotor::rotation_yw(-rotation_amount);
+                                * Rotor::rotation_zw(-rotation_amount);
                             camera_changed = true;
                         }
                     } else {
@@ -556,15 +556,19 @@ impl eframe::App for App {
                         }
                         if i.key_down(egui::Key::ArrowLeft) {
                             self.state.camera.base_rotation = self.state.camera.base_rotation
-                                * Rotor::rotation_xy(-rotation_amount);
+                                * Rotor::rotation_xz(-rotation_amount);
                             camera_changed = true;
                         }
                         if i.key_down(egui::Key::ArrowRight) {
                             self.state.camera.base_rotation = self.state.camera.base_rotation
-                                * Rotor::rotation_xy(rotation_amount);
+                                * Rotor::rotation_xz(rotation_amount);
                             camera_changed = true;
                         }
                     }
+                }
+
+                if i.key_pressed(egui::Key::V) {
+                    self.state.camera.volume_view_enabled = !self.state.camera.volume_view_enabled;
                 }
             });
         }

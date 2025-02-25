@@ -102,7 +102,7 @@ fn main(
     ray.origin = camera.position;
     ray.direction = normalize(camera.right * (uv.x * camera.aspect) + camera.up * uv.y + camera.forward);
 
-    var color = mix(camera.down_sky_color, camera.up_sky_color, ray.direction.z * 0.5 + 0.5);
+    var color = mix(camera.down_sky_color, camera.up_sky_color, ray.direction.y * 0.5 + 0.5);
 
     let hit = ray_hit(ray);
     if hit.hit {

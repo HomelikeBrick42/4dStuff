@@ -21,10 +21,15 @@ struct Camera {
 }
 
 impl Camera {
+    pub const FORWARD: cgmath::Vector4<f32> = cgmath::vec4(1.0, 0.0, 0.0, 0.0);
+    pub const RIGHT: cgmath::Vector4<f32> = cgmath::vec4(0.0, 0.0, 1.0, 0.0);
+    pub const UP: cgmath::Vector4<f32> = cgmath::vec4(0.0, 1.0, 0.0, 0.0);
+    pub const ANA: cgmath::Vector4<f32> = cgmath::vec4(0.0, 0.0, 0.0, 1.0);
+
     pub fn get_rotation(&self) -> Rotor {
         self.base_rotation
-            * Rotor::rotation_xz(self.vertical_angle * (1.0 - self.volume_view_percentage))
-            * Rotor::rotation_zw(std::f32::consts::FRAC_PI_2 * self.volume_view_percentage)
+            * Rotor::rotation_xy(self.vertical_angle * (1.0 - self.volume_view_percentage))
+            * Rotor::rotation_yw(std::f32::consts::FRAC_PI_2 * self.volume_view_percentage)
     }
 }
 
@@ -73,10 +78,10 @@ impl DrawUi for Camera {
 
         ui.add_enabled_ui(false, |ui| {
             let rotation = self.get_rotation();
-            let mut forward = rotation.rotate(cgmath::vec4(1.0, 0.0, 0.0, 0.0));
-            let mut right = rotation.rotate(cgmath::vec4(0.0, 1.0, 0.0, 0.0));
-            let mut up = rotation.rotate(cgmath::vec4(0.0, 0.0, 1.0, 0.0));
-            let mut ana = rotation.rotate(cgmath::vec4(0.0, 0.0, 0.0, 1.0));
+            let mut forward = rotation.rotate(Self::FORWARD);
+            let mut right = rotation.rotate(Self::RIGHT);
+            let mut up = rotation.rotate(Self::UP);
+            let mut ana = rotation.rotate(Self::ANA);
 
             ui.horizontal(|ui| {
                 ui.label("Forward: ");
