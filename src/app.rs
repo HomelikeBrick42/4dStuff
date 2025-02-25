@@ -1,4 +1,6 @@
-use crate::{DrawUi, HyperSphere, camera::Camera, gpu_buffer::GpuBuffer, rotor::Rotor};
+use crate::{
+    DrawUi, camera::Camera, gpu_buffer::GpuBuffer, hyper_sphere::HyperSphere, rotor::Rotor,
+};
 use cgmath::InnerSpace;
 use eframe::{egui, wgpu};
 use encase::{ShaderSize, ShaderType};
@@ -274,30 +276,6 @@ impl App {
         })
     }
 
-    fn resize(&mut self, width: u32, height: u32, render_state: &eframe::egui_wgpu::RenderState) {
-        let eframe::egui_wgpu::RenderState {
-            device, renderer, ..
-        } = render_state;
-
-        let egui_texture_view;
-        (
-            self.egui_texture,
-            egui_texture_view,
-            self.egui_texture_bind_group,
-        ) = Self::egui_texture(
-            device,
-            width.max(1),
-            height.max(1),
-            &self.egui_texture_bind_group_layout,
-        );
-        renderer.write().update_egui_texture_from_wgpu_texture(
-            &render_state.device,
-            &egui_texture_view,
-            wgpu::FilterMode::Nearest,
-            self.egui_texture_id,
-        );
-    }
-
     fn get_gpu_camera(state: &State, aspect: f32) -> GpuCamera {
         let rotation = state.camera.get_rotation();
         GpuCamera {
@@ -327,6 +305,30 @@ impl App {
             color,
             radius,
         }
+    }
+
+    fn resize(&mut self, width: u32, height: u32, render_state: &eframe::egui_wgpu::RenderState) {
+        let eframe::egui_wgpu::RenderState {
+            device, renderer, ..
+        } = render_state;
+
+        let egui_texture_view;
+        (
+            self.egui_texture,
+            egui_texture_view,
+            self.egui_texture_bind_group,
+        ) = Self::egui_texture(
+            device,
+            width.max(1),
+            height.max(1),
+            &self.egui_texture_bind_group_layout,
+        );
+        renderer.write().update_egui_texture_from_wgpu_texture(
+            &render_state.device,
+            &egui_texture_view,
+            wgpu::FilterMode::Nearest,
+            self.egui_texture_id,
+        );
     }
 
     fn render(&self, device: &wgpu::Device, queue: &wgpu::Queue) {
