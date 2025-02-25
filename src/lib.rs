@@ -13,25 +13,18 @@ use serde::{Deserialize, Serialize};
 struct Camera {
     pub position: cgmath::Vector4<f32>,
     pub base_rotation: Rotor,
-    pub mode: CameraMode,
-}
+    pub vertical_angle: f32,
 
-#[derive(Serialize, Deserialize)]
-enum CameraMode {
-    Normal { vertical_angle: f32 },
-    Volume,
+    pub volume_view_enabled: bool,
+    /// a value between 0 and 1, 0 is no volume view, 1 is full volume view
+    pub volume_view_percentage: f32,
 }
 
 impl Camera {
     pub fn get_rotation(&self) -> Rotor {
-        match self.mode {
-            CameraMode::Normal { vertical_angle } => {
-                self.base_rotation * Rotor::rotation_xz(vertical_angle)
-            }
-            CameraMode::Volume => {
-                self.base_rotation * Rotor::rotation_zw(std::f32::consts::FRAC_PI_2)
-            }
-        }
+        self.base_rotation
+            * Rotor::rotation_xz(self.vertical_angle * (1.0 - self.volume_view_percentage))
+            * Rotor::rotation_zw(std::f32::consts::FRAC_PI_2 * self.volume_view_percentage)
     }
 }
 
@@ -103,47 +96,22 @@ impl DrawUi for Camera {
             });
         });
 
-        let volume_change_enabled = match self.mode {
-            CameraMode::Normal { vertical_angle } => vertical_angle == 0.0,
-            CameraMode::Volume => true,
-        };
-
         if ui.button("Reset Rotation").clicked() {
-            match &mut self.mode {
-                CameraMode::Normal { vertical_angle } => *vertical_angle = 0.0,
-                CameraMode::Volume => {}
-            }
             self.base_rotation = Rotor::IDENTITY;
+            self.vertical_angle = 0.0;
             changed = true;
         }
 
         ui.horizontal(|ui| {
             ui.label("Volume View: ");
-
-            let mut volume = matches!(self.mode, CameraMode::Volume);
-            ui.add_enabled_ui(volume_change_enabled, |ui| {
-                if ui.checkbox(&mut volume, "").clicked() {
-                    self.mode = if volume {
-                        CameraMode::Volume
-                    } else {
-                        CameraMode::Normal {
-                            vertical_angle: 0.0,
-                        }
-                    };
-                    changed = true;
-                }
-            });
+            ui.checkbox(&mut self.volume_view_enabled, "");
         });
 
-        if let CameraMode::Normal { vertical_angle } = &mut self.mode {
-            ui.horizontal(|ui| {
-                ui.label("Vertical Angle: ");
-                changed |= ui.drag_angle(vertical_angle).changed();
-            });
-            if !volume_change_enabled {
-                ui.label("Volume View cannot be enabled if the vertical angle is not exactly 0");
-            }
-        }
+        ui.horizontal(|ui| {
+            ui.label("Vertical Angle: ");
+            changed |= ui.drag_angle(&mut self.vertical_angle).changed();
+            ui.label("(not used in volume view)");
+        });
 
         changed
     }

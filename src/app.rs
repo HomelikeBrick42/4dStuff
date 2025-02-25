@@ -1,4 +1,4 @@
-use crate::{Camera, CameraMode, DrawUi, HyperSphere, gpu_buffer::GpuBuffer, rotor::Rotor};
+use crate::{Camera, DrawUi, HyperSphere, gpu_buffer::GpuBuffer, rotor::Rotor};
 use cgmath::InnerSpace;
 use eframe::{egui, wgpu};
 use encase::{ShaderSize, ShaderType};
@@ -46,9 +46,9 @@ impl Default for State {
             camera: Camera {
                 position: cgmath::vec4(-3.0, 0.0, 0.0, 0.0),
                 base_rotation: Rotor::IDENTITY,
-                mode: CameraMode::Normal {
-                    vertical_angle: 0.0,
-                },
+                vertical_angle: 0.0,
+                volume_view_enabled: false,
+                volume_view_percentage: 0.0,
             },
 
             sun_direction: cgmath::vec4(-0.2, 0.1, 1.0, 0.0),
@@ -488,84 +488,81 @@ impl eframe::App for App {
                     camera_changed = true;
                 }
 
-                match &mut self.state.camera.mode {
-                    CameraMode::Normal { vertical_angle } => {
-                        if i.modifiers.shift {
-                            if i.key_down(egui::Key::ArrowUp) {
-                                self.state.camera.base_rotation = self.state.camera.base_rotation
-                                    * Rotor::rotation_xw(rotation_amount);
-                                camera_changed = true;
-                            }
-                            if i.key_down(egui::Key::ArrowDown) {
-                                self.state.camera.base_rotation = self.state.camera.base_rotation
-                                    * Rotor::rotation_xw(-rotation_amount);
-                                camera_changed = true;
-                            }
-                            if i.key_down(egui::Key::ArrowLeft) {
-                                self.state.camera.base_rotation = self.state.camera.base_rotation
-                                    * Rotor::rotation_yw(-rotation_amount);
-                                camera_changed = true;
-                            }
-                            if i.key_down(egui::Key::ArrowRight) {
-                                self.state.camera.base_rotation = self.state.camera.base_rotation
-                                    * Rotor::rotation_yw(rotation_amount);
-                                camera_changed = true;
-                            }
-                        } else {
-                            if i.key_down(egui::Key::ArrowUp) {
-                                *vertical_angle += rotation_amount;
-                                camera_changed = true;
-                            }
-                            if i.key_down(egui::Key::ArrowDown) {
-                                *vertical_angle -= rotation_amount;
-                                camera_changed = true;
-                            }
-                            if i.key_down(egui::Key::ArrowLeft) {
-                                self.state.camera.base_rotation = self.state.camera.base_rotation
-                                    * Rotor::rotation_xy(-rotation_amount);
-                                camera_changed = true;
-                            }
-                            if i.key_down(egui::Key::ArrowRight) {
-                                self.state.camera.base_rotation = self.state.camera.base_rotation
-                                    * Rotor::rotation_xy(rotation_amount);
-                                camera_changed = true;
-                            }
+                #[expect(clippy::collapsible_else_if)]
+                if !self.state.camera.volume_view_enabled {
+                    if i.modifiers.shift {
+                        if i.key_down(egui::Key::ArrowUp) {
+                            self.state.camera.base_rotation = self.state.camera.base_rotation
+                                * Rotor::rotation_xw(rotation_amount);
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::ArrowDown) {
+                            self.state.camera.base_rotation = self.state.camera.base_rotation
+                                * Rotor::rotation_xw(-rotation_amount);
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::ArrowLeft) {
+                            self.state.camera.base_rotation = self.state.camera.base_rotation
+                                * Rotor::rotation_yw(-rotation_amount);
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::ArrowRight) {
+                            self.state.camera.base_rotation = self.state.camera.base_rotation
+                                * Rotor::rotation_yw(rotation_amount);
+                            camera_changed = true;
+                        }
+                    } else {
+                        if i.key_down(egui::Key::ArrowUp) {
+                            self.state.camera.vertical_angle += rotation_amount;
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::ArrowDown) {
+                            self.state.camera.vertical_angle -= rotation_amount;
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::ArrowLeft) {
+                            self.state.camera.base_rotation = self.state.camera.base_rotation
+                                * Rotor::rotation_xy(-rotation_amount);
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::ArrowRight) {
+                            self.state.camera.base_rotation = self.state.camera.base_rotation
+                                * Rotor::rotation_xy(rotation_amount);
+                            camera_changed = true;
                         }
                     }
-
-                    CameraMode::Volume => {
-                        if i.modifiers.shift {
-                            if i.key_down(egui::Key::ArrowLeft) {
-                                self.state.camera.base_rotation = self.state.camera.base_rotation
-                                    * Rotor::rotation_yw(rotation_amount);
-                                camera_changed = true;
-                            }
-                            if i.key_down(egui::Key::ArrowRight) {
-                                self.state.camera.base_rotation = self.state.camera.base_rotation
-                                    * Rotor::rotation_yw(-rotation_amount);
-                                camera_changed = true;
-                            }
-                        } else {
-                            if i.key_down(egui::Key::ArrowUp) {
-                                self.state.camera.base_rotation = self.state.camera.base_rotation
-                                    * Rotor::rotation_xw(rotation_amount);
-                                camera_changed = true;
-                            }
-                            if i.key_down(egui::Key::ArrowDown) {
-                                self.state.camera.base_rotation = self.state.camera.base_rotation
-                                    * Rotor::rotation_xw(-rotation_amount);
-                                camera_changed = true;
-                            }
-                            if i.key_down(egui::Key::ArrowLeft) {
-                                self.state.camera.base_rotation = self.state.camera.base_rotation
-                                    * Rotor::rotation_xy(-rotation_amount);
-                                camera_changed = true;
-                            }
-                            if i.key_down(egui::Key::ArrowRight) {
-                                self.state.camera.base_rotation = self.state.camera.base_rotation
-                                    * Rotor::rotation_xy(rotation_amount);
-                                camera_changed = true;
-                            }
+                } else {
+                    if i.modifiers.shift {
+                        if i.key_down(egui::Key::ArrowLeft) {
+                            self.state.camera.base_rotation = self.state.camera.base_rotation
+                                * Rotor::rotation_yw(rotation_amount);
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::ArrowRight) {
+                            self.state.camera.base_rotation = self.state.camera.base_rotation
+                                * Rotor::rotation_yw(-rotation_amount);
+                            camera_changed = true;
+                        }
+                    } else {
+                        if i.key_down(egui::Key::ArrowUp) {
+                            self.state.camera.base_rotation = self.state.camera.base_rotation
+                                * Rotor::rotation_xw(rotation_amount);
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::ArrowDown) {
+                            self.state.camera.base_rotation = self.state.camera.base_rotation
+                                * Rotor::rotation_xw(-rotation_amount);
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::ArrowLeft) {
+                            self.state.camera.base_rotation = self.state.camera.base_rotation
+                                * Rotor::rotation_xy(-rotation_amount);
+                            camera_changed = true;
+                        }
+                        if i.key_down(egui::Key::ArrowRight) {
+                            self.state.camera.base_rotation = self.state.camera.base_rotation
+                                * Rotor::rotation_xy(rotation_amount);
+                            camera_changed = true;
                         }
                     }
                 }
@@ -574,6 +571,22 @@ impl eframe::App for App {
 
         if camera_changed {
             self.state.camera.base_rotation = self.state.camera.base_rotation.normalized();
+        }
+
+        let volume_view_duration = 0.5;
+        if self.state.camera.volume_view_enabled && self.state.camera.volume_view_percentage < 1.0 {
+            self.state.camera.volume_view_percentage =
+                (self.state.camera.volume_view_percentage + ts / volume_view_duration).min(1.0);
+            if self.state.camera.volume_view_percentage == 1.0 {
+                self.state.camera.vertical_angle = 0.0;
+            }
+            camera_changed = true;
+        } else if !self.state.camera.volume_view_enabled
+            && self.state.camera.volume_view_percentage > 0.0
+        {
+            self.state.camera.volume_view_percentage =
+                (self.state.camera.volume_view_percentage - ts / volume_view_duration).max(0.0);
+            camera_changed = true;
         }
 
         egui::CentralPanel::default()
