@@ -1,5 +1,9 @@
 use crate::{
-    DrawUi, camera::Camera, gpu_buffer::GpuBuffer, hyper_sphere::HyperSphere, rotor::Rotor,
+    DrawUi,
+    camera::Camera,
+    gpu_buffer::{GpuBuffer, GpuSliceBuffer},
+    hyper_sphere::HyperSphere,
+    rotor::Rotor,
 };
 use cgmath::InnerSpace;
 use eframe::{egui, wgpu};
@@ -75,11 +79,11 @@ pub struct App {
     egui_texture_bind_group: wgpu::BindGroup,
     egui_texture_id: egui::TextureId,
 
-    camera_buffer: GpuBuffer<GpuCamera, false>,
+    camera_buffer: GpuBuffer<GpuCamera>,
     camera_bind_group: wgpu::BindGroup,
 
     hyper_spheres_bind_group_layout: wgpu::BindGroupLayout,
-    hyper_spheres_buffer: GpuBuffer<GpuHyperSphere, true>,
+    hyper_spheres_buffer: GpuSliceBuffer<GpuHyperSphere>,
     hyper_spheres_bind_group: wgpu::BindGroup,
 
     ray_tracing_pipeline: wgpu::ComputePipeline,
@@ -169,7 +173,7 @@ impl App {
                     count: None,
                 }],
             });
-        let hyper_spheres_buffer = GpuBuffer::new_slice(
+        let hyper_spheres_buffer = GpuSliceBuffer::new(
             device,
             queue,
             "Hyper Spheres Buffer",
@@ -263,7 +267,7 @@ impl App {
 
     fn hyper_spheres_bind_group(
         device: &wgpu::Device,
-        hyper_spheres_buffer: &GpuBuffer<GpuHyperSphere, true>,
+        hyper_spheres_buffer: &GpuSliceBuffer<GpuHyperSphere>,
         hyper_spheres_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {

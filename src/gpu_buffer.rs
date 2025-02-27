@@ -4,14 +4,36 @@ use encase::{
 };
 use std::marker::PhantomData;
 
-pub struct GpuBuffer<T, const SLICE: bool> {
-    label: &'static str,
-    usage: wgpu::BufferUsages,
-    buffer: wgpu::Buffer,
-    _element: PhantomData<T>,
+pub type GpuBuffer<T> = private::GpuBuffer<T, false>;
+pub type GpuSliceBuffer<T> = private::GpuBuffer<T, true>;
+
+mod private {
+    use super::*;
+
+    pub struct GpuBuffer<T, const SLICE: bool> {
+        pub(super) label: &'static str,
+        pub(super) usage: wgpu::BufferUsages,
+        pub(super) buffer: wgpu::Buffer,
+        pub(super) _element: PhantomData<T>,
+    }
 }
 
-impl<T: ShaderSize + WriteInto> GpuBuffer<T, false> {
+impl<T, const SLICE: bool> private::GpuBuffer<T, SLICE> {
+    pub fn get_buffer(&self) -> &wgpu::Buffer {
+        &self.buffer
+    }
+
+    fn resize(&mut self, device: &wgpu::Device, new_size: wgpu::BufferAddress) {
+        self.buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(self.label),
+            size: new_size,
+            usage: self.usage,
+            mapped_at_creation: false,
+        });
+    }
+}
+
+impl<T: ShaderSize + WriteInto> GpuBuffer<T> {
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -54,21 +76,6 @@ impl<T: ShaderSize + WriteInto> GpuBuffer<T, false> {
     }
 }
 
-impl<T, const SLICE: bool> GpuBuffer<T, SLICE> {
-    pub fn get_buffer(&self) -> &wgpu::Buffer {
-        &self.buffer
-    }
-
-    fn resize(&mut self, device: &wgpu::Device, new_size: wgpu::BufferAddress) {
-        self.buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some(self.label),
-            size: new_size,
-            usage: self.usage,
-            mapped_at_creation: false,
-        });
-    }
-}
-
 #[derive(ShaderType)]
 struct GpuSlice<'a, T: ShaderSize + 'a> {
     length: ArrayLength,
@@ -76,8 +83,8 @@ struct GpuSlice<'a, T: ShaderSize + 'a> {
     data: &'a [T],
 }
 
-impl<T: ShaderSize + WriteInto> GpuBuffer<T, true> {
-    pub fn new_slice(
+impl<T: ShaderSize + WriteInto> GpuSliceBuffer<T> {
+    pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         label: &'static str,
