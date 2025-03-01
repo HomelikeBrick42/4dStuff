@@ -9,7 +9,8 @@ struct Camera {
     up: vec4<f32>,
     sun_direction: vec4<f32>,
     sun_color: vec3<f32>,
-    ambient_color: vec3<f32>,
+    sun_light_color: vec3<f32>,
+    ambient_light_color: vec3<f32>,
     up_sky_color: vec3<f32>,
     down_sky_color: vec3<f32>,
     aspect: f32,
@@ -106,13 +107,13 @@ fn main(
 
     let hit = ray_hit(ray);
     if hit.hit {
-        color = hit.color * camera.ambient_color;
+        color = hit.color * camera.ambient_light_color;
         var sun_ray: Ray;
         sun_ray.origin = hit.position;
         sun_ray.direction = camera.sun_direction;
         let sun_hit = ray_hit(sun_ray);
         if !sun_hit.hit {
-            color += hit.color * max(dot(sun_ray.direction, hit.normal), 0.0);
+            color += camera.sun_light_color * hit.color * max(dot(sun_ray.direction, hit.normal), 0.0);
         }
     } else if dot(camera.sun_direction, ray.direction) > 0.99 {
         color = camera.sun_color;

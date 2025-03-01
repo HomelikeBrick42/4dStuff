@@ -18,7 +18,8 @@ struct GpuCamera {
     pub up: cgmath::Vector4<f32>,
     pub sun_direction: cgmath::Vector4<f32>,
     pub sun_color: cgmath::Vector3<f32>,
-    pub ambient_color: cgmath::Vector3<f32>,
+    pub sun_light_color: cgmath::Vector3<f32>,
+    pub ambient_light_color: cgmath::Vector3<f32>,
     pub up_sky_color: cgmath::Vector3<f32>,
     pub down_sky_color: cgmath::Vector3<f32>,
     pub aspect: f32,
@@ -38,7 +39,8 @@ pub struct State {
 
     sun_direction: cgmath::Vector4<f32>,
     sun_color: cgmath::Vector3<f32>,
-    ambient_color: cgmath::Vector3<f32>,
+    sun_light_color: cgmath::Vector3<f32>,
+    ambient_light_color: cgmath::Vector3<f32>,
     up_sky_color: cgmath::Vector3<f32>,
     down_sky_color: cgmath::Vector3<f32>,
 
@@ -59,7 +61,8 @@ impl Default for State {
 
             sun_direction: cgmath::vec4(-0.2, 1.0, 0.1, 0.0),
             sun_color: cgmath::vec3(0.9, 0.8, 0.7),
-            ambient_color: cgmath::vec3(0.1, 0.1, 0.1),
+            sun_light_color: cgmath::vec3(1.0, 1.0, 1.0),
+            ambient_light_color: cgmath::vec3(0.1, 0.1, 0.1),
             up_sky_color: cgmath::vec3(0.5, 0.5, 0.9),
             down_sky_color: cgmath::vec3(0.2, 0.2, 0.2),
 
@@ -289,7 +292,8 @@ impl App {
             up: rotation.rotate(Camera::UP),
             sun_direction: state.sun_direction.normalize(),
             sun_color: state.sun_color,
-            ambient_color: state.ambient_color,
+            sun_light_color: state.sun_light_color,
+            ambient_light_color: state.ambient_light_color,
             up_sky_color: state.up_sky_color,
             down_sky_color: state.down_sky_color,
             aspect,
@@ -396,9 +400,15 @@ impl eframe::App for App {
                     .changed();
             });
             ui.horizontal(|ui| {
-                ui.label("Ambient Color: ");
+                ui.label("Sun Light Color: ");
                 camera_changed |= ui
-                    .color_edit_button_rgb(self.state.ambient_color.as_mut())
+                    .color_edit_button_rgb(self.state.sun_light_color.as_mut())
+                    .changed();
+            });
+            ui.horizontal(|ui| {
+                ui.label("Ambient Light Color: ");
+                camera_changed |= ui
+                    .color_edit_button_rgb(self.state.ambient_light_color.as_mut())
                     .changed();
             });
             ui.horizontal(|ui| {
