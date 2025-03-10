@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 cgmath = { version = "0.18.0", features = ["serde"] }
 encase = { version = "0.10.0", features = ["cgmath"] }
+pollster = "0.4.0"
 ron = "0.8.1"
 serde = { version = "1.0.219", features = ["derive"] }
 wgpu = "24.0.1"
+winit = "0.30.9"
