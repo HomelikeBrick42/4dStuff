@@ -85,29 +85,41 @@ impl ApplicationHandler for App {
             .expect("if there is a window event the window should have been created");
         assert_eq!(window.id(), id);
 
+        let mut resized = |surface_config: &mut wgpu::SurfaceConfiguration,
+                           size: winit::dpi::PhysicalSize<u32>| {
+            surface_config.width = size.width.max(1);
+            surface_config.height = size.height.max(1);
+            surface.configure(&self.device, surface_config);
+            self.state
+                .resize(&self.device, surface_config.width, surface_config.height);
+        };
+
         match event {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
 
-            WindowEvent::Resized(size) => {
-                surface_config.width = size.width.max(1);
-                surface_config.height = size.height.max(1);
-                surface.configure(&self.device, surface_config);
-            }
+            WindowEvent::Resized(size) => resized(surface_config, size),
 
             WindowEvent::RedrawRequested => {
                 let surface_texture = loop {
                     match surface.get_current_texture() {
                         Ok(texture) => break texture,
 
-                        Err(wgpu::SurfaceError::Timeout) => {}
+                        Err(e @ wgpu::SurfaceError::Timeout) => {
+                            eprintln!("WARNING: {e}");
+                        }
 
-                        Err(wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost) => {
+                        Err(wgpu::SurfaceError::Outdated) => {
+                            let size = window.inner_size();
+                            resized(surface_config, size);
+                        }
+
+                        Err(wgpu::SurfaceError::Lost) => {
                             surface.configure(&self.device, surface_config);
                         }
 
-                        Err(e) => {
+                        Err(e @ (wgpu::SurfaceError::OutOfMemory | wgpu::SurfaceError::Other)) => {
                             eprintln!("ERROR: {e}");
                             return;
                         }
@@ -152,7 +164,7 @@ fn main() {
 
     let state = State::new(&device, &queue);
 
-    let event_loop = EventLoop::new().unwrap();
+    let event_loop = EventLoop::new().expect("the event loop should be created");
     event_loop.set_control_flow(ControlFlow::Poll);
     event_loop
         .run_app(&mut App {
@@ -164,5 +176,5 @@ fn main() {
             last_frame_time: None,
             delta_time: std::time::Duration::ZERO,
         })
-        .expect("The event loop should be started");
+        .expect("the event loop should be started");
 }
