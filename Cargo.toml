@@ -3,6 +3,9 @@ name = "ray_tracer"
 version = "0.1.0"
 edition = "2024"
 
+[lints.rust]
+elided_lifetimes_in_paths = "deny"
+
 [dependencies]
 cgmath = { version = "0.18.0", features = ["serde"] }
 encase = { version = "0.10.0", features = ["cgmath"] }
