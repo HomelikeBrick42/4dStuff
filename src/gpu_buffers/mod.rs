@@ -37,51 +37,6 @@ pub trait BufferTuple: BufferTupleSealed {
     ) -> bool;
 }
 
-impl<T: Buffer> BufferTupleSealed for T {}
-impl<T: Buffer> BufferTuple for T {
-    type Array<Item> = [Item; 1];
-    type CreationInfo = BufferCreationInfo<T>;
-    type WriteInput<'a>
-        = Option<&'a T::Data>
-    where
-        Self: 'a;
-
-    fn construct(info: Self::CreationInfo) -> Self {
-        info.buffer
-    }
-
-    fn bind_group_layout_entries(
-        info: &Self::CreationInfo,
-    ) -> Self::Array<wgpu::BindGroupLayoutEntry> {
-        [wgpu::BindGroupLayoutEntry {
-            binding: 0,
-            visibility: info.visibility,
-            ty: wgpu::BindingType::Buffer {
-                ty: info.binding_type,
-                has_dynamic_offset: false,
-                min_binding_size: Some(T::min_size()),
-            },
-            count: None,
-        }]
-    }
-
-    fn bind_group_entries(&self) -> Self::Array<wgpu::BindGroupEntry<'_>> {
-        [wgpu::BindGroupEntry {
-            binding: 0,
-            resource: self.buffer().as_entire_binding(),
-        }]
-    }
-
-    fn write(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        write_input: Self::WriteInput<'_>,
-    ) -> bool {
-        write_input.is_some_and(|input| self.write(device, queue, input))
-    }
-}
-
 pub struct BufferCreationInfo<T> {
     pub buffer: T,
     pub binding_type: wgpu::BufferBindingType,
@@ -171,7 +126,7 @@ macro_rules! tuple_impls {
                 let mut counter = move || {
                     let value = counter;
                     counter += 1;
-                    counter
+                    value
                 };
 
                 let ($($names,)*) = info;
@@ -193,7 +148,7 @@ macro_rules! tuple_impls {
                 let mut counter = move || {
                     let value = counter;
                     counter += 1;
-                    counter
+                    value
                 };
 
                 let ($($names,)*) = self;

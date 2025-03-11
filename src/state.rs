@@ -5,8 +5,9 @@ use winit::{
 
 use crate::{
     camera::Camera,
-    gpu_buffers::{BufferCreationInfo, BufferGroup, FixedSizeBuffer},
-    gpu_types::GpuCamera,
+    gpu_buffers::{ArrayBuffer, BufferCreationInfo, BufferGroup, FixedSizeBuffer},
+    gpu_types::{GpuCamera, GpuHyperSphere},
+    hyper_sphere::HyperSphere,
 };
 
 pub struct State {
@@ -17,7 +18,10 @@ pub struct State {
     main_texture_render_bind_group: wgpu::BindGroup,
 
     camera: Camera,
-    camera_buffer: BufferGroup<FixedSizeBuffer<GpuCamera>>,
+    camera_buffer: BufferGroup<(FixedSizeBuffer<GpuCamera>,)>,
+
+    hyper_spheres: Vec<HyperSphere>,
+    hyper_spheres_buffer: BufferGroup<(ArrayBuffer<GpuHyperSphere>,)>,
 
     ray_tracing_pipeline: wgpu::ComputePipeline,
     render_pipeline: wgpu::RenderPipeline,
@@ -42,7 +46,7 @@ impl State {
         let camera_buffer = BufferGroup::new(
             device,
             "Camera",
-            BufferCreationInfo {
+            (BufferCreationInfo {
                 buffer: FixedSizeBuffer::new(
                     device,
                     queue,
@@ -52,7 +56,39 @@ impl State {
                 ),
                 binding_type: wgpu::BufferBindingType::Uniform,
                 visibility: wgpu::ShaderStages::COMPUTE,
+            },),
+        );
+
+        let hyper_spheres = vec![
+            HyperSphere {
+                position: cgmath::vec4(3.0, -1001.0, 0.0, 0.0),
+                color: cgmath::vec3(0.2, 0.6, 0.3),
+                radius: 1000.0,
             },
+            HyperSphere {
+                position: cgmath::vec4(3.0, 0.0, 0.0, 0.0),
+                color: cgmath::vec3(0.8, 0.2, 0.1),
+                radius: 1.0,
+            },
+        ];
+        let hyper_spheres_buffer = BufferGroup::new(
+            device,
+            "Hyper Spheres",
+            (BufferCreationInfo {
+                buffer: ArrayBuffer::new(
+                    device,
+                    queue,
+                    "Hyper Spheres",
+                    wgpu::BufferUsages::STORAGE,
+                    hyper_spheres
+                        .iter()
+                        .map(GpuHyperSphere::from_hyper_sphere)
+                        .collect::<Vec<_>>()
+                        .as_slice(),
+                ),
+                binding_type: wgpu::BufferBindingType::Storage { read_only: true },
+                visibility: wgpu::ShaderStages::COMPUTE,
+            },),
         );
 
         let ray_tracing_shader =
@@ -63,6 +99,7 @@ impl State {
                 bind_group_layouts: &[
                     &main_texture_output_bind_group_layout,
                     camera_buffer.bind_group_layout(),
+                    hyper_spheres_buffer.bind_group_layout(),
                 ],
                 push_constant_ranges: &[],
             });
@@ -135,6 +172,9 @@ impl State {
             camera,
             camera_buffer,
 
+            hyper_spheres,
+            hyper_spheres_buffer,
+
             ray_tracing_pipeline,
             render_pipeline,
 
@@ -197,8 +237,22 @@ impl State {
     }
 
     pub fn render(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Texture) {
-        self.camera_buffer
-            .write(device, queue, Some(&GpuCamera::from_camera(&self.camera)));
+        self.camera_buffer.write(
+            device,
+            queue,
+            (Some(&GpuCamera::from_camera(&self.camera)),),
+        );
+        self.hyper_spheres_buffer.write(
+            device,
+            queue,
+            (Some(
+                self.hyper_spheres
+                    .iter()
+                    .map(GpuHyperSphere::from_hyper_sphere)
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+            ),),
+        );
 
         let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Main Rendering Encoder"),
@@ -215,6 +269,7 @@ impl State {
             compute_pass.set_pipeline(&self.ray_tracing_pipeline);
             compute_pass.set_bind_group(0, &self.main_texture_output_bind_group, &[]);
             compute_pass.set_bind_group(1, self.camera_buffer.bind_group(), &[]);
+            compute_pass.set_bind_group(2, self.hyper_spheres_buffer.bind_group(), &[]);
             compute_pass.dispatch_workgroups(width.div_ceil(16), height.div_ceil(16), 1);
         }
         {

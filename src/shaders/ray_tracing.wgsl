@@ -17,6 +17,20 @@ struct Camera {
 @group(1) @binding(0)
 var<uniform> camera: Camera;
 
+struct HyperSphere {
+    position: vec4<f32>,
+    color: vec3<f32>,
+    radius: f32,
+}
+
+struct HyperSpheres {
+    length: u32,
+    data: array<HyperSphere>,
+}
+
+@group(2) @binding(0)
+var<storage, read> hyper_spheres: HyperSpheres;
+
 struct Ray {
     origin: vec4<f32>,
     direction: vec4<f32>,
@@ -30,9 +44,41 @@ struct Hit {
     distance: f32,
 }
 
+fn hyper_sphere_hit(ray: Ray, hyper_sphere: HyperSphere) -> Hit {
+    var hit: Hit;
+    hit.hit = false;
+
+    let oc = hyper_sphere.position - ray.origin;
+    // TODO: can this be replaced with 1?
+    let a = dot(ray.direction, ray.direction);
+    let h = dot(ray.direction, oc);
+    let c = dot(oc, oc) - hyper_sphere.radius * hyper_sphere.radius;
+    let discriminant = h * h - a * c;
+
+    if discriminant >= 0.0 {
+        hit.distance = (h - sqrt(discriminant)) / a;
+        if hit.distance > 0.0 {
+            hit.hit = true;
+            hit.position = ray.origin + ray.direction * hit.distance;
+            hit.normal = (hit.position - hyper_sphere.position) / hyper_sphere.radius;
+            hit.color = hyper_sphere.color;
+        }
+    }
+
+    return hit;
+}
+
 fn ray_hit(ray: Ray) -> Hit {
     var hit: Hit;
     hit.hit = false;
+
+    for (var i = 0u; i < hyper_spheres.length; i += 1u) {
+        let hyper_sphere_hit = hyper_sphere_hit(ray, hyper_spheres.data[i]);
+        if hyper_sphere_hit.hit && (!hit.hit || hyper_sphere_hit.distance < hit.distance) {
+            hit = hyper_sphere_hit;
+        }
+    }
+
     return hit;
 }
 

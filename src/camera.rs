@@ -68,6 +68,10 @@ impl Camera {
     }
 
     pub fn key(&mut self, key: KeyCode, state: ElementState) {
+        if let (KeyCode::KeyV, ElementState::Pressed) = (key, state) {
+            self.volume_mode = !self.volume_mode;
+        }
+
         let speed = 2.0;
         let movement = match key {
             KeyCode::KeyW => Some((&mut self.forward_movement, speed)),
@@ -101,7 +105,7 @@ impl Camera {
 
         if self.volume_mode {
             self.base_rotation = self.base_rotation * Rotor::rotation_xz(delta.x * sensitivity);
-            self.base_rotation = self.base_rotation * Rotor::rotation_xw(delta.y * sensitivity);
+            self.base_rotation = self.base_rotation * Rotor::rotation_xw(-delta.y * sensitivity);
         } else {
             self.xy_rotation -= delta.y * sensitivity;
             self.xy_rotation = self
@@ -131,7 +135,7 @@ impl Default for Camera {
             sun_direction: cgmath::vec4(-0.2, 1.0, 0.1, 0.0),
             sun_color: cgmath::vec3(0.9, 0.8, 0.7),
             sun_light_color: cgmath::vec3(1.0, 1.0, 1.0),
-            ambient_light_color: cgmath::vec3(0.1, 0.1, 0.1),
+            ambient_light_color: cgmath::vec3(0.2, 0.2, 0.2),
             up_sky_color: cgmath::vec3(0.5, 0.5, 0.9),
             down_sky_color: cgmath::vec3(0.2, 0.2, 0.2),
         }
