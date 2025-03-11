@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use ray_tracer::State;
+use ray_tracer::state::State;
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
