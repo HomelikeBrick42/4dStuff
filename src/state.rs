@@ -63,7 +63,7 @@ impl State {
 
         let materials = vec![
             Material {
-                color: cgmath::vec3(0.2, 0.6, 0.3),
+                color: cgmath::vec3(0.1, 0.6, 0.2),
             },
             Material {
                 color: cgmath::vec3(0.8, 0.2, 0.1),
@@ -241,6 +241,12 @@ impl State {
             self.mouse_locked = false;
 
             self.camera.reset_keys();
+        }
+    }
+
+    pub fn mouse_scrolled(&mut self, delta: cgmath::Vector2<f32>) {
+        if self.mouse_locked {
+            self.camera.mouse_scrolled(delta);
         }
     }
 

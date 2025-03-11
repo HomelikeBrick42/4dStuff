@@ -100,6 +100,15 @@ impl Camera {
         self.ana_movement = 0.0;
     }
 
+    pub fn mouse_scrolled(&mut self, delta: cgmath::Vector2<f32>) {
+        let sensitivity = 0.2;
+        if self.volume_mode {
+            self.base_rotation = self.base_rotation * Rotor::rotation_zw(delta.y * sensitivity);
+        } else {
+            self.base_rotation = self.base_rotation * Rotor::rotation_xw(delta.y * sensitivity);
+        }
+    }
+
     pub fn mouse_moved(&mut self, delta: cgmath::Vector2<f32>) {
         let sensitivity = 0.01;
 
@@ -135,7 +144,7 @@ impl Default for Camera {
             sun_direction: cgmath::vec4(-0.2, 1.0, 0.1, 0.0),
             sun_color: cgmath::vec3(0.9, 0.8, 0.7),
             sun_light_color: cgmath::vec3(1.0, 1.0, 1.0),
-            ambient_light_color: cgmath::vec3(0.2, 0.2, 0.2),
+            ambient_light_color: cgmath::vec3(0.3, 0.3, 0.3),
             up_sky_color: cgmath::vec3(0.5, 0.5, 0.9),
             down_sky_color: cgmath::vec3(0.2, 0.2, 0.2),
         }

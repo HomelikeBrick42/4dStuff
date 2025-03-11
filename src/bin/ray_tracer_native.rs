@@ -3,7 +3,7 @@ use std::sync::Arc;
 use ray_tracer::state::State;
 use winit::{
     application::ApplicationHandler,
-    event::{DeviceEvent, KeyEvent, WindowEvent},
+    event::{DeviceEvent, KeyEvent, MouseScrollDelta, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::PhysicalKey,
     window::{Window, WindowId},
@@ -97,7 +97,7 @@ impl ApplicationHandler for App {
             .expect("the state should exist unless the app is exiting");
 
         if let DeviceEvent::MouseMotion { delta: (x, y) } = event {
-            state.mouse_moved(cgmath::vec2(x as f32, y as f32))
+            state.mouse_moved(cgmath::vec2(x as f32, y as f32));
         }
     }
 
@@ -179,6 +179,18 @@ impl ApplicationHandler for App {
                     },
                 is_synthetic: _,
             } => state.key(key, key_state, window),
+
+            WindowEvent::MouseWheel {
+                device_id: _,
+                delta: MouseScrollDelta::LineDelta(x, y),
+                phase: _,
+            } => state.mouse_scrolled(cgmath::vec2(x, y)),
+
+            WindowEvent::MouseWheel {
+                device_id: _,
+                delta: MouseScrollDelta::PixelDelta(delta),
+                phase: _,
+            } => state.mouse_scrolled(cgmath::vec2(delta.x as f32, delta.y as f32)),
 
             WindowEvent::MouseInput {
                 device_id: _,
