@@ -20,7 +20,12 @@ impl<T: ShaderSize + WriteInto + 'static> ArrayBuffer<T> {
             name,
             buffer: device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(name),
-                size: data.size().get(),
+                size: GpuData {
+                    length: ArrayLength,
+                    data,
+                }
+                .size()
+                .get(),
                 usage: usage | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             }),
