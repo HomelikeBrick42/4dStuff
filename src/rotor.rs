@@ -1,8 +1,7 @@
 use encase::ShaderType;
-use serde::{Deserialize, Serialize};
 use std::ops::{Mul, Not};
 
-#[derive(Debug, Clone, Copy, ShaderType, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, ShaderType)]
 pub struct Rotor {
     pub s: f32,
     pub e12: f32,

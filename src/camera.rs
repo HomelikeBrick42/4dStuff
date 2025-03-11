@@ -1,10 +1,8 @@
 use crate::rotor::Rotor;
 use cgmath::Zero;
-use serde::{Deserialize, Serialize};
 use winit::{event::ElementState, keyboard::KeyCode};
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(default)]
+#[derive(Debug)]
 pub struct Camera {
     pub position: cgmath::Vector4<f32>,
 
