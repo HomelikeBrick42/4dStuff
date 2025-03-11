@@ -1,6 +1,13 @@
 @group(0) @binding(0)
 var output_texture: texture_storage_2d<rgba32float, write>;
 
+struct Camera {
+    position: vec4<f32>,
+}
+
+@group(1) @binding(0)
+var<uniform> camera: Camera;
+
 @compute @workgroup_size(16, 16, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let size = textureDimensions(output_texture);

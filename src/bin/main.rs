@@ -9,10 +9,9 @@ use winit::{
 };
 
 struct WindowState {
+    window: Arc<Window>,
     surface: wgpu::Surface<'static>,
     surface_config: wgpu::SurfaceConfiguration,
-    // putting this after because so far it seems to prevent a segfault when closing the program
-    window: Arc<Window>,
 }
 
 struct App {

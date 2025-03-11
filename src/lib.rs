@@ -1,3 +1,13 @@
+use encase::ShaderType;
+use fixed_size_buffer::{FixedSizeBuffer, create_fixed_size_buffer};
+
+pub mod fixed_size_buffer;
+
+#[derive(ShaderType)]
+struct GpuCamera {
+    position: cgmath::Vector4<f32>,
+}
+
 pub struct State {
     main_texture_output_bind_group_layout: wgpu::BindGroupLayout,
     main_texture_render_bind_group_layout: wgpu::BindGroupLayout,
@@ -5,12 +15,15 @@ pub struct State {
     main_texture_output_bind_group: wgpu::BindGroup,
     main_texture_render_bind_group: wgpu::BindGroup,
 
+    camera: GpuCamera,
+    camera_buffer: FixedSizeBuffer<GpuCamera>,
+
     ray_tracing_pipeline: wgpu::ComputePipeline,
     render_pipeline: wgpu::RenderPipeline,
 }
 
 impl State {
-    pub fn new(device: &wgpu::Device, _queue: &wgpu::Queue) -> State {
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> State {
         let (main_texture_output_bind_group_layout, main_texture_render_bind_group_layout) =
             main_texture_bind_group_layouts(device);
         let (main_texture, main_texture_output_bind_group, main_texture_render_bind_group) =
@@ -22,12 +35,33 @@ impl State {
                 &main_texture_render_bind_group_layout,
             );
 
+        let camera = GpuCamera {
+            position: cgmath::Vector4 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 0.0,
+            },
+        };
+        let camera_buffer = create_fixed_size_buffer!(
+            device,
+            queue,
+            "Camera",
+            wgpu::BufferUsages::UNIFORM,
+            wgpu::BufferBindingType::Uniform,
+            wgpu::ShaderStages::COMPUTE,
+            &camera,
+        );
+
         let ray_tracing_shader =
             device.create_shader_module(wgpu::include_wgsl!("./shaders/ray_tracing.wgsl"));
         let ray_tracing_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Ray Tracing Pipeline Layout"),
-                bind_group_layouts: &[&main_texture_output_bind_group_layout],
+                bind_group_layouts: &[
+                    &main_texture_output_bind_group_layout,
+                    camera_buffer.bind_group_layout(),
+                ],
                 push_constant_ranges: &[],
             });
         let ray_tracing_pipeline =
@@ -96,6 +130,9 @@ impl State {
             main_texture_output_bind_group,
             main_texture_render_bind_group,
 
+            camera,
+            camera_buffer,
+
             ray_tracing_pipeline,
             render_pipeline,
         }
@@ -118,8 +155,10 @@ impl State {
     }
 
     pub fn render(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Texture) {
+        self.camera_buffer.update(queue, &self.camera);
+
         let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Rendering Encoder"),
+            label: Some("Main Rendering Encoder"),
         });
         {
             let mut compute_pass =
@@ -132,6 +171,7 @@ impl State {
 
             compute_pass.set_pipeline(&self.ray_tracing_pipeline);
             compute_pass.set_bind_group(0, &self.main_texture_output_bind_group, &[]);
+            compute_pass.set_bind_group(1, self.camera_buffer.bind_group(), &[]);
             compute_pass.dispatch_workgroups(width.div_ceil(16), height.div_ceil(16), 1);
         }
         {
