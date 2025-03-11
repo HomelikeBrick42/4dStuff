@@ -3,9 +3,12 @@ name = "ray_tracer"
 version = "0.1.0"
 edition = "2024"
 
+[lints.rust]
+elided_lifetimes_in_paths = "deny"
+
 [dependencies]
-anyhow = { version = "1.0.96", features = ["backtrace"] }
-cgmath = { version = "0.18.0", features = ["serde"] }
-eframe = { version = "0.31.0", default-features = false, features = ["accesskit", "default_fonts", "persistence", "ron", "wayland", "wgpu", "x11"] }
+cgmath = { version = "0.18.0" }
 encase = { version = "0.10.0", features = ["cgmath"] }
-serde = { version = "1.0.218", features = ["derive"] }
+pollster = "0.4.0"
+wgpu = "24.0.1"
+winit = "0.30.9"

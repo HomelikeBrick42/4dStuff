@@ -1,23 +1,20 @@
-@group(0)
-@binding(0)
-var output_texture: texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(0)
+var output_texture: texture_storage_2d<rgba32float, write>;
 
 struct Camera {
     position: vec4<f32>,
     forward: vec4<f32>,
-    right: vec4<f32>,
     up: vec4<f32>,
+    right: vec4<f32>,
     sun_direction: vec4<f32>,
     sun_color: vec3<f32>,
     sun_light_color: vec3<f32>,
     ambient_light_color: vec3<f32>,
     up_sky_color: vec3<f32>,
     down_sky_color: vec3<f32>,
-    aspect: f32,
 }
 
-@group(1)
-@binding(0)
+@group(1) @binding(0)
 var<uniform> camera: Camera;
 
 struct HyperSphere {
@@ -31,8 +28,7 @@ struct HyperSpheres {
     data: array<HyperSphere>,
 }
 
-@group(2)
-@binding(0)
+@group(2) @binding(0)
 var<storage, read> hyper_spheres: HyperSpheres;
 
 struct Ray {
@@ -53,7 +49,8 @@ fn hyper_sphere_hit(ray: Ray, hyper_sphere: HyperSphere) -> Hit {
     hit.hit = false;
 
     let oc = hyper_sphere.position - ray.origin;
-    let a = dot(ray.direction, ray.direction); // TODO: can this be replaced with 1?
+    // TODO: can this be replaced with 1?
+    let a = dot(ray.direction, ray.direction);
     let h = dot(ray.direction, oc);
     let c = dot(oc, oc) - hyper_sphere.radius * hyper_sphere.radius;
     let discriminant = h * h - a * c;
@@ -85,11 +82,8 @@ fn ray_hit(ray: Ray) -> Hit {
     return hit;
 }
 
-@compute
-@workgroup_size(16, 16, 1)
-fn main(
-    @builtin(global_invocation_id) global_id: vec3<u32>,
-) {
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let size = textureDimensions(output_texture);
     let coords = global_id.xy;
 
@@ -97,11 +91,12 @@ fn main(
         return;
     }
 
-    var uv = ((vec2<f32>(coords) + 0.5) / vec2<f32>(size)) * 2.0 - 1.0;
+    let aspect = f32(size.x) / f32(size.y);
+    let uv = ((vec2<f32>(coords) + 0.5) / vec2<f32>(size)) * 2.0 - 1.0;
 
     var ray: Ray;
     ray.origin = camera.position;
-    ray.direction = normalize(camera.right * (uv.x * camera.aspect) + camera.up * uv.y + camera.forward);
+    ray.direction = normalize(camera.right * (uv.x * aspect) + camera.up * uv.y + camera.forward);
 
     var color = mix(camera.down_sky_color, camera.up_sky_color, ray.direction.y * 0.5 + 0.5);
 
@@ -115,7 +110,8 @@ fn main(
         if !sun_hit.hit {
             color += camera.sun_light_color * hit.color * max(dot(sun_ray.direction, hit.normal), 0.0);
         }
-    } else if dot(camera.sun_direction, ray.direction) > 0.99 {
+    }
+    else if dot(camera.sun_direction, ray.direction) > 0.99 {
         color = camera.sun_color;
     }
 

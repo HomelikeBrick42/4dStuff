@@ -1,236 +1,143 @@
-use crate::{DrawUi, rotor::Rotor};
-use eframe::egui;
-use serde::{Deserialize, Serialize};
+use crate::rotor::Rotor;
+use cgmath::Zero;
+use winit::{event::ElementState, keyboard::KeyCode};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct Camera {
     pub position: cgmath::Vector4<f32>,
-    pub base_rotation: Rotor,
-    pub vertical_angle: f32,
 
-    pub volume_view_enabled: bool,
-    /// a value between 0 and 1, 0 is no volume view, 1 is full volume view
-    pub volume_view_percentage: f32,
+    pub forward_movement: f32,
+    pub up_movement: f32,
+    pub right_movement: f32,
+    pub ana_movement: f32,
+
+    pub base_rotation: Rotor,
+    pub volume_mode: bool,
+    pub volume_mode_percentage: f32,
+    pub xy_rotation: f32,
+
+    pub sun_direction: cgmath::Vector4<f32>,
+    pub sun_color: cgmath::Vector3<f32>,
+    pub sun_light_color: cgmath::Vector3<f32>,
+    pub ambient_light_color: cgmath::Vector3<f32>,
+    pub up_sky_color: cgmath::Vector3<f32>,
+    pub down_sky_color: cgmath::Vector3<f32>,
 }
 
 impl Camera {
-    pub const FORWARD: cgmath::Vector4<f32> = cgmath::vec4(1.0, 0.0, 0.0, 0.0);
-    pub const RIGHT: cgmath::Vector4<f32> = cgmath::vec4(0.0, 0.0, 1.0, 0.0);
-    pub const UP: cgmath::Vector4<f32> = cgmath::vec4(0.0, 1.0, 0.0, 0.0);
-    pub const ANA: cgmath::Vector4<f32> = cgmath::vec4(0.0, 0.0, 0.0, 1.0);
+    pub const FORWARD: cgmath::Vector4<f32> = cgmath::Vector4::new(1.0, 0.0, 0.0, 0.0);
+    pub const UP: cgmath::Vector4<f32> = cgmath::Vector4::new(0.0, 1.0, 0.0, 0.0);
+    pub const RIGHT: cgmath::Vector4<f32> = cgmath::Vector4::new(0.0, 0.0, 1.0, 0.0);
+    pub const ANA: cgmath::Vector4<f32> = cgmath::Vector4::new(0.0, 0.0, 0.0, 1.0);
 
-    pub fn get_rotation(&self) -> Rotor {
+    pub fn get_rotation_without_xy(&self) -> Rotor {
         self.base_rotation
-            * Rotor::rotation_xy(self.vertical_angle * (1.0 - self.volume_view_percentage))
-            * Rotor::rotation_yw(std::f32::consts::FRAC_PI_2 * self.volume_view_percentage)
+            * Rotor::rotation_yw(core::f32::consts::FRAC_PI_2 * self.volume_mode_percentage)
     }
 
-    /// returns whether the camera was updated
-    pub fn update(&mut self, ts: f32, ctx: &egui::Context) -> bool {
-        let mut changed = false;
+    pub fn get_rotation(&self) -> Rotor {
+        self.get_rotation_without_xy()
+            * Rotor::rotation_xy(self.xy_rotation * (1.0 - self.volume_mode_percentage))
+    }
 
-        if !ctx.wants_keyboard_input() {
-            ctx.input(|i| {
-                let movement_amount = 4.0 * ts;
-                let rotation_amount = std::f32::consts::FRAC_PI_2 * ts;
+    pub fn update(&mut self, ts: f32) {
+        if self.volume_mode {
+            self.volume_mode_percentage += ts;
+        } else {
+            self.volume_mode_percentage -= ts;
+        }
+        self.volume_mode_percentage = self.volume_mode_percentage.clamp(0.0, 1.0);
 
-                let rotation = self.get_rotation();
-                let forward = rotation.rotate(Camera::FORWARD * movement_amount);
-                let right = rotation.rotate(Camera::RIGHT * movement_amount);
-                let up = rotation.rotate(Camera::UP * movement_amount);
-                let ana = rotation.rotate(Camera::ANA * movement_amount);
-
-                if i.key_down(egui::Key::W) {
-                    self.position += forward;
-                    changed = true;
-                }
-                if i.key_down(egui::Key::S) {
-                    self.position -= forward;
-                    changed = true;
-                }
-                if i.key_down(egui::Key::A) {
-                    self.position -= right;
-                    changed = true;
-                }
-                if i.key_down(egui::Key::D) {
-                    self.position += right;
-                    changed = true;
-                }
-                if i.key_down(egui::Key::Q) {
-                    self.position -= up;
-                    changed = true;
-                }
-                if i.key_down(egui::Key::E) {
-                    self.position += up;
-                    changed = true;
-                }
-                if i.key_down(egui::Key::R) {
-                    self.position += ana;
-                    changed = true;
-                }
-                if i.key_down(egui::Key::F) {
-                    self.position -= ana;
-                    changed = true;
-                }
-
-                #[expect(clippy::collapsible_else_if)]
-                if !self.volume_view_enabled {
-                    if i.modifiers.shift {
-                        if i.key_down(egui::Key::ArrowUp) {
-                            self.base_rotation =
-                                self.base_rotation * Rotor::rotation_xw(rotation_amount);
-                            changed = true;
-                        }
-                        if i.key_down(egui::Key::ArrowDown) {
-                            self.base_rotation =
-                                self.base_rotation * Rotor::rotation_xw(-rotation_amount);
-                            changed = true;
-                        }
-                        if i.key_down(egui::Key::ArrowLeft) {
-                            self.base_rotation =
-                                self.base_rotation * Rotor::rotation_zw(-rotation_amount);
-                            changed = true;
-                        }
-                        if i.key_down(egui::Key::ArrowRight) {
-                            self.base_rotation =
-                                self.base_rotation * Rotor::rotation_zw(rotation_amount);
-                            changed = true;
-                        }
-                    } else {
-                        if i.key_down(egui::Key::ArrowUp) {
-                            self.vertical_angle += rotation_amount;
-                            changed = true;
-                        }
-                        if i.key_down(egui::Key::ArrowDown) {
-                            self.vertical_angle -= rotation_amount;
-                            changed = true;
-                        }
-                        if i.key_down(egui::Key::ArrowLeft) {
-                            self.base_rotation =
-                                self.base_rotation * Rotor::rotation_xz(-rotation_amount);
-                            changed = true;
-                        }
-                        if i.key_down(egui::Key::ArrowRight) {
-                            self.base_rotation =
-                                self.base_rotation * Rotor::rotation_xz(rotation_amount);
-                            changed = true;
-                        }
-                    }
-                } else {
-                    if i.modifiers.shift {
-                        if i.key_down(egui::Key::ArrowLeft) {
-                            self.base_rotation =
-                                self.base_rotation * Rotor::rotation_zw(rotation_amount);
-                            changed = true;
-                        }
-                        if i.key_down(egui::Key::ArrowRight) {
-                            self.base_rotation =
-                                self.base_rotation * Rotor::rotation_zw(-rotation_amount);
-                            changed = true;
-                        }
-                    } else {
-                        if i.key_down(egui::Key::ArrowUp) {
-                            self.base_rotation =
-                                self.base_rotation * Rotor::rotation_xw(rotation_amount);
-                            changed = true;
-                        }
-                        if i.key_down(egui::Key::ArrowDown) {
-                            self.base_rotation =
-                                self.base_rotation * Rotor::rotation_xw(-rotation_amount);
-                            changed = true;
-                        }
-                        if i.key_down(egui::Key::ArrowLeft) {
-                            self.base_rotation =
-                                self.base_rotation * Rotor::rotation_xz(-rotation_amount);
-                            changed = true;
-                        }
-                        if i.key_down(egui::Key::ArrowRight) {
-                            self.base_rotation =
-                                self.base_rotation * Rotor::rotation_xz(rotation_amount);
-                            changed = true;
-                        }
-                    }
-                }
-
-                if i.key_pressed(egui::Key::V) {
-                    self.volume_view_enabled = !self.volume_view_enabled;
-                }
-            });
+        if self.volume_mode_percentage >= 1.0 {
+            self.xy_rotation = 0.0;
         }
 
-        if changed {
-            self.base_rotation = self.base_rotation.normalized();
+        let rotation = self.get_rotation_without_xy();
+        let forward = rotation.rotate(Camera::FORWARD);
+        let up = rotation.rotate(Camera::UP);
+        let right = rotation.rotate(Camera::RIGHT);
+        let ana = rotation.rotate(Camera::ANA);
+
+        self.position += forward * (self.forward_movement * ts);
+        self.position += up * (self.up_movement * ts);
+        self.position += right * (self.right_movement * ts);
+        self.position += ana * (self.ana_movement * ts);
+
+        // not really sure if this needs to be done here, but doing it somewhere is probably good
+        self.base_rotation = self.base_rotation.normalized();
+    }
+
+    pub fn key(&mut self, key: KeyCode, state: ElementState) {
+        if let (KeyCode::KeyV, ElementState::Pressed) = (key, state) {
+            self.volume_mode = !self.volume_mode;
         }
 
-        let volume_view_duration = 0.5;
-        if self.volume_view_enabled && self.volume_view_percentage < 1.0 {
-            self.volume_view_percentage =
-                (self.volume_view_percentage + ts / volume_view_duration).min(1.0);
-            if self.volume_view_percentage == 1.0 {
-                self.vertical_angle = 0.0;
+        let speed = 2.0;
+        let movement = match key {
+            KeyCode::KeyW => Some((&mut self.forward_movement, speed)),
+            KeyCode::KeyS => Some((&mut self.forward_movement, -speed)),
+            KeyCode::KeyQ => Some((&mut self.up_movement, -speed)),
+            KeyCode::KeyE => Some((&mut self.up_movement, speed)),
+            KeyCode::KeyA => Some((&mut self.right_movement, -speed)),
+            KeyCode::KeyD => Some((&mut self.right_movement, speed)),
+            KeyCode::KeyR => Some((&mut self.ana_movement, speed)),
+            KeyCode::KeyF => Some((&mut self.ana_movement, -speed)),
+            _ => None,
+        };
+
+        if let Some((movement, amount)) = movement {
+            match state {
+                ElementState::Pressed => *movement = amount,
+                ElementState::Released => *movement = 0.0,
             }
-            changed = true;
-        } else if !self.volume_view_enabled && self.volume_view_percentage > 0.0 {
-            self.volume_view_percentage =
-                (self.volume_view_percentage - ts / volume_view_duration).max(0.0);
-            changed = true;
         }
+    }
 
-        changed
+    pub fn reset_keys(&mut self) {
+        self.forward_movement = 0.0;
+        self.up_movement = 0.0;
+        self.right_movement = 0.0;
+        self.ana_movement = 0.0;
+    }
+
+    pub fn mouse_moved(&mut self, delta: cgmath::Vector2<f32>) {
+        let sensitivity = 0.01;
+
+        if self.volume_mode {
+            self.base_rotation = self.base_rotation * Rotor::rotation_xz(delta.x * sensitivity);
+            self.base_rotation = self.base_rotation * Rotor::rotation_xw(-delta.y * sensitivity);
+        } else {
+            self.xy_rotation -= delta.y * sensitivity;
+            self.xy_rotation = self
+                .xy_rotation
+                .clamp(-core::f32::consts::FRAC_PI_2, core::f32::consts::FRAC_PI_2);
+
+            self.base_rotation = self.base_rotation * Rotor::rotation_xz(delta.x * sensitivity);
+        }
     }
 }
 
-impl DrawUi for Camera {
-    fn draw_ui(&mut self, ui: &mut egui::Ui) -> bool {
-        let mut changed = false;
+impl Default for Camera {
+    fn default() -> Self {
+        Self {
+            position: cgmath::Vector4::zero(),
 
-        ui.horizontal(|ui| {
-            ui.label("Position: ");
-            changed |= self.position.draw_ui(ui);
-        });
+            forward_movement: 0.0,
+            up_movement: 0.0,
+            right_movement: 0.0,
+            ana_movement: 0.0,
 
-        ui.add_enabled_ui(false, |ui| {
-            let rotation = self.get_rotation();
-            let mut forward = rotation.rotate(Self::FORWARD);
-            let mut right = rotation.rotate(Self::RIGHT);
-            let mut up = rotation.rotate(Self::UP);
-            let mut ana = rotation.rotate(Self::ANA);
+            base_rotation: Rotor::IDENTITY,
+            volume_mode: false,
+            volume_mode_percentage: 0.0,
+            xy_rotation: 0.0,
 
-            ui.horizontal(|ui| {
-                ui.label("Forward: ");
-                forward.draw_ui(ui);
-            });
-            ui.horizontal(|ui| {
-                ui.label("Right: ");
-                right.draw_ui(ui);
-            });
-            ui.horizontal(|ui| {
-                ui.label("Up: ");
-                up.draw_ui(ui);
-            });
-            ui.horizontal(|ui| {
-                ui.label("Ana: ");
-                ana.draw_ui(ui);
-            });
-        });
-
-        if ui.button("Reset Rotation").clicked() {
-            self.base_rotation = Rotor::IDENTITY;
-            self.vertical_angle = 0.0;
-            changed = true;
+            sun_direction: cgmath::vec4(-0.2, 1.0, 0.1, 0.0),
+            sun_color: cgmath::vec3(0.9, 0.8, 0.7),
+            sun_light_color: cgmath::vec3(1.0, 1.0, 1.0),
+            ambient_light_color: cgmath::vec3(0.2, 0.2, 0.2),
+            up_sky_color: cgmath::vec3(0.5, 0.5, 0.9),
+            down_sky_color: cgmath::vec3(0.2, 0.2, 0.2),
         }
-
-        ui.horizontal(|ui| {
-            ui.label("Volume View: ");
-            ui.checkbox(&mut self.volume_view_enabled, "");
-        });
-
-        ui.horizontal(|ui| {
-            ui.label("Vertical Angle: ");
-            changed |= ui.drag_angle(&mut self.vertical_angle).changed();
-            ui.label("(not used in volume view)");
-        });
-
-        changed
     }
 }

@@ -1,8 +1,7 @@
 use encase::ShaderType;
-use serde::{Deserialize, Serialize};
 use std::ops::{Mul, Not};
 
-#[derive(Debug, Clone, Copy, ShaderType, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, ShaderType)]
 pub struct Rotor {
     pub s: f32,
     pub e12: f32,
@@ -115,13 +114,13 @@ impl Rotor {
     pub fn rotate(self, normal: cgmath::Vector4<f32>) -> cgmath::Vector4<f32> {
         let Self {
             s: a,
-            e12: f,
-            e13: g,
-            e14: h,
-            e23: i,
-            e24: j,
-            e34: k,
-            e1234: p,
+            e12: b,
+            e13: c,
+            e14: d,
+            e23: e,
+            e24: f,
+            e34: g,
+            e1234: h,
         } = self;
         let cgmath::Vector4 {
             x: p3,
@@ -130,30 +129,30 @@ impl Rotor {
             w: p0,
         } = normal;
         let ap2 = a * p2;
-        let fp3 = f * p3;
-        let ip1 = i * p1;
-        let jp0 = j * p0;
+        let bp3 = b * p3;
+        let ep1 = e * p1;
+        let fp0 = f * p0;
         let ap3 = a * p3;
-        let fp2 = f * p2;
-        let gp1 = g * p1;
-        let hp0 = h * p0;
+        let bp2 = b * p2;
+        let cp1 = c * p1;
+        let dp0 = d * p0;
         let ap1 = a * p1;
-        let kp0 = k * p0;
-        let gp3 = g * p3;
-        let ip2 = i * p2;
+        let gp0 = g * p0;
+        let cp3 = c * p3;
+        let ep2 = e * p2;
         let ap0 = a * p0;
-        let kp1 = k * p1;
-        let hp3 = h * p3;
-        let jp2 = j * p2;
-        let s0 = ip1 - ap2 - fp3 - jp0;
-        let s1 = ap3 + gp1 - fp2 - hp0;
-        let s2 = ap1 + ip2 - kp0 - gp3;
-        let s3 = jp2 - ap0 - kp1 - hp3;
+        let gp1 = g * p1;
+        let dp3 = d * p3;
+        let fp2 = f * p2;
+        let s0 = ep1 - ap2 - bp3 - fp0;
+        let s1 = ap3 + cp1 - bp2 - dp0;
+        let s2 = ap1 + ep2 - gp0 - cp3;
+        let s3 = fp2 - ap0 - gp1 - dp3;
         let [w, z, y, x] = [
-            p0 + 2.0 * (p * (f * p1 + g * p2 + i * p3 - p * p0) + j * s0 + h * s1 + k * s2),
-            p1 + 2.0 * (p * (h * p2 + j * p3 - p * p1 - f * p0) + k * s3 - i * s0 - g * s1),
-            p2 + 2.0 * (p * (k * p3 - p * p2 - g * p0 - h * p1) + f * s1 - j * s3 - i * s2),
-            p3 + 2.0 * (h * s3 + g * s2 + f * s0 - p * (k * p2 + p * p3 + i * p0 + j * p1)),
+            p0 + 2.0 * (h * (b * p1 + c * p2 + e * p3 - h * p0) + f * s0 + d * s1 + g * s2),
+            p1 + 2.0 * (h * (d * p2 + f * p3 - h * p1 - b * p0) + g * s3 - e * s0 - c * s1),
+            p2 + 2.0 * (h * (g * p3 - h * p2 - c * p0 - d * p1) + b * s1 - f * s3 - e * s2),
+            p3 + 2.0 * (d * s3 + c * s2 + b * s0 - h * (g * p2 + h * p3 + e * p0 + f * p1)),
         ];
         cgmath::Vector4 { x, y, z, w }
     }
@@ -192,33 +191,33 @@ impl Mul<Self> for Rotor {
     fn mul(self, rhs: Self) -> Self::Output {
         let Self {
             s: a1,
-            e12: g1,
-            e13: h1,
-            e14: i1,
-            e23: j1,
-            e24: k1,
-            e34: l1,
-            e1234: q1,
+            e12: b1,
+            e13: c1,
+            e14: d1,
+            e23: e1,
+            e24: f1,
+            e34: g1,
+            e1234: h1,
         } = self;
         let Self {
             s: a2,
-            e12: g2,
-            e13: h2,
-            e14: i2,
-            e23: j2,
-            e24: k2,
-            e34: l2,
-            e1234: q2,
+            e12: b2,
+            e13: c2,
+            e14: d2,
+            e23: e2,
+            e24: f2,
+            e34: g2,
+            e1234: h2,
         } = rhs;
         Self {
-            s: -g1 * g2 + -h1 * h2 + -i1 * i2 + -j1 * j2 + -k1 * k2 + -l1 * l2 + a1 * a2 + q1 * q2,
-            e12: -h1 * j2 + -i1 * k2 + -l1 * q2 + -l2 * q1 + a1 * g2 + a2 * g1 + h2 * j1 + i2 * k1,
-            e13: -g2 * j1 + -i1 * l2 + a1 * h2 + a2 * h1 + g1 * j2 + i2 * l1 + k1 * q2 + k2 * q1,
-            e14: -g2 * k1 + -h2 * l1 + -j1 * q2 + -j2 * q1 + a1 * i2 + a2 * i1 + g1 * k2 + h1 * l2,
-            e23: -g1 * h2 + -i1 * q2 + -i2 * q1 + -k1 * l2 + a1 * j2 + a2 * j1 + g2 * h1 + k2 * l1,
-            e24: -g1 * i2 + -j2 * l1 + a1 * k2 + a2 * k1 + g2 * i1 + h1 * q2 + h2 * q1 + j1 * l2,
-            e34: -g1 * q2 + -g2 * q1 + -h1 * i2 + -j1 * k2 + a1 * l2 + a2 * l1 + h2 * i1 + j2 * k1,
-            e1234: -h1 * k2 + -h2 * k1 + a1 * q2 + a2 * q1 + g1 * l2 + g2 * l1 + i1 * j2 + i2 * j1,
+            s: -b1 * b2 + -c1 * c2 + -d1 * d2 + -e1 * e2 + -f1 * f2 + -g1 * g2 + a1 * a2 + h1 * h2,
+            e12: -c1 * e2 + -d1 * f2 + -g1 * h2 + -g2 * h1 + a1 * b2 + a2 * b1 + c2 * e1 + d2 * f1,
+            e13: -b2 * e1 + -d1 * g2 + a1 * c2 + a2 * c1 + b1 * e2 + d2 * g1 + f1 * h2 + f2 * h1,
+            e14: -b2 * f1 + -c2 * g1 + -e1 * h2 + -e2 * h1 + a1 * d2 + a2 * d1 + b1 * f2 + c1 * g2,
+            e23: -b1 * c2 + -d1 * h2 + -d2 * h1 + -f1 * g2 + a1 * e2 + a2 * e1 + b2 * c1 + f2 * g1,
+            e24: -b1 * d2 + -e2 * g1 + a1 * f2 + a2 * f1 + b2 * d1 + c1 * h2 + c2 * h1 + e1 * g2,
+            e34: -b1 * h2 + -b2 * h1 + -c1 * d2 + -e1 * f2 + a1 * g2 + a2 * g1 + c2 * d1 + e2 * f1,
+            e1234: -c1 * f2 + -c2 * f1 + a1 * h2 + a2 * h1 + b1 * g2 + b2 * g1 + d1 * e2 + d2 * e1,
         }
     }
 }
