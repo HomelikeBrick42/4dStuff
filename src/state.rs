@@ -5,7 +5,7 @@ use winit::{
 
 use crate::{
     camera::Camera,
-    fixed_size_buffer::{FixedSizeBuffer, create_fixed_size_buffer},
+    gpu_buffers::{BufferCreationInfo, BufferGroup, FixedSizeBuffer},
     gpu_types::GpuCamera,
 };
 
@@ -17,7 +17,7 @@ pub struct State {
     main_texture_render_bind_group: wgpu::BindGroup,
 
     camera: Camera,
-    camera_buffer: FixedSizeBuffer<GpuCamera>,
+    camera_buffer: BufferGroup<FixedSizeBuffer<GpuCamera>>,
 
     ray_tracing_pipeline: wgpu::ComputePipeline,
     render_pipeline: wgpu::RenderPipeline,
@@ -39,14 +39,20 @@ impl State {
             );
 
         let camera = Camera::default();
-        let camera_buffer = create_fixed_size_buffer!(
+        let camera_buffer = BufferGroup::new(
             device,
-            queue,
             "Camera",
-            wgpu::BufferUsages::UNIFORM,
-            wgpu::BufferBindingType::Uniform,
-            wgpu::ShaderStages::COMPUTE,
-            &GpuCamera::from_camera(&camera),
+            BufferCreationInfo {
+                buffer: FixedSizeBuffer::new(
+                    device,
+                    queue,
+                    "Camera",
+                    wgpu::BufferUsages::UNIFORM,
+                    &GpuCamera::from_camera(&camera),
+                ),
+                binding_type: wgpu::BufferBindingType::Uniform,
+                visibility: wgpu::ShaderStages::COMPUTE,
+            },
         );
 
         let ray_tracing_shader =
@@ -192,7 +198,7 @@ impl State {
 
     pub fn render(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Texture) {
         self.camera_buffer
-            .update(queue, &GpuCamera::from_camera(&self.camera));
+            .write(device, queue, Some(&GpuCamera::from_camera(&self.camera)));
 
         let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Main Rendering Encoder"),

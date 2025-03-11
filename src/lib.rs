@@ -1,5 +1,5 @@
 pub mod camera;
-pub mod fixed_size_buffer;
+pub mod gpu_buffers;
 mod gpu_types;
 pub mod rotor;
 pub mod state;
