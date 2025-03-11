@@ -4,7 +4,6 @@ use std::marker::PhantomData;
 
 pub struct ArrayBuffer<T> {
     name: &'static str,
-    usage: wgpu::BufferUsages,
     buffer: wgpu::Buffer,
     _data: PhantomData<T>,
 }
@@ -19,11 +18,10 @@ impl<T: ShaderSize + WriteInto + 'static> ArrayBuffer<T> {
     ) -> Self {
         let mut this = Self {
             name,
-            usage,
             buffer: device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(name),
                 size: data.size().get(),
-                usage,
+                usage: usage | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             }),
             _data: PhantomData,
@@ -63,7 +61,7 @@ impl<T: ShaderSize + WriteInto + 'static> Buffer for ArrayBuffer<T> {
             self.buffer = device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(self.name),
                 size: new_size.get(),
-                usage: self.usage,
+                usage: self.buffer.usage(),
                 mapped_at_creation: false,
             });
         }
