@@ -17,10 +17,22 @@ struct Camera {
 @group(1) @binding(0)
 var<uniform> camera: Camera;
 
+struct Material {
+    color: vec3<f32>,
+}
+
+struct Materials {
+    length: u32,
+    data: array<Material>,
+}
+
+@group(2) @binding(0)
+var<storage, read> materials: Materials;
+
 struct HyperSphere {
     position: vec4<f32>,
-    color: vec3<f32>,
     radius: f32,
+    material: u32,
 }
 
 struct HyperSpheres {
@@ -28,7 +40,7 @@ struct HyperSpheres {
     data: array<HyperSphere>,
 }
 
-@group(2) @binding(0)
+@group(2) @binding(1)
 var<storage, read> hyper_spheres: HyperSpheres;
 
 struct Ray {
@@ -40,8 +52,8 @@ struct Hit {
     hit: bool,
     position: vec4<f32>,
     normal: vec4<f32>,
-    color: vec3<f32>,
     distance: f32,
+    material: u32,
 }
 
 fn hyper_sphere_hit(ray: Ray, hyper_sphere: HyperSphere) -> Hit {
@@ -61,7 +73,7 @@ fn hyper_sphere_hit(ray: Ray, hyper_sphere: HyperSphere) -> Hit {
             hit.hit = true;
             hit.position = ray.origin + ray.direction * hit.distance;
             hit.normal = (hit.position - hyper_sphere.position) / hyper_sphere.radius;
-            hit.color = hyper_sphere.color;
+            hit.material = hyper_sphere.material;
         }
     }
 
@@ -102,13 +114,15 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let hit = ray_hit(ray);
     if hit.hit {
-        color = hit.color * camera.ambient_light_color;
+        let material = materials.data[hit.material];
+        color = material.color * camera.ambient_light_color;
+
         var sun_ray: Ray;
         sun_ray.origin = hit.position;
         sun_ray.direction = camera.sun_direction;
         let sun_hit = ray_hit(sun_ray);
         if !sun_hit.hit {
-            color += camera.sun_light_color * hit.color * max(dot(sun_ray.direction, hit.normal), 0.0);
+            color += camera.sun_light_color * material.color * max(dot(sun_ray.direction, hit.normal), 0.0);
         }
     }
     else if dot(camera.sun_direction, ray.direction) > 0.99 {

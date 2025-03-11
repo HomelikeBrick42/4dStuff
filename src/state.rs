@@ -6,8 +6,9 @@ use winit::{
 use crate::{
     camera::Camera,
     gpu_buffers::{ArrayBuffer, BufferCreationInfo, BufferGroup, FixedSizeBuffer},
-    gpu_types::{GpuCamera, GpuHyperSphere},
+    gpu_types::{GpuCamera, GpuHyperSphere, GpuMaterial},
     hyper_sphere::HyperSphere,
+    material::Material,
 };
 
 pub struct State {
@@ -20,8 +21,9 @@ pub struct State {
     camera: Camera,
     camera_buffer: BufferGroup<(FixedSizeBuffer<GpuCamera>,)>,
 
+    materials: Vec<Material>,
     hyper_spheres: Vec<HyperSphere>,
-    hyper_spheres_buffer: BufferGroup<(ArrayBuffer<GpuHyperSphere>,)>,
+    objects_buffer: BufferGroup<(ArrayBuffer<GpuMaterial>, ArrayBuffer<GpuHyperSphere>)>,
 
     ray_tracing_pipeline: wgpu::ComputePipeline,
     render_pipeline: wgpu::RenderPipeline,
@@ -59,36 +61,61 @@ impl State {
             },),
         );
 
+        let materials = vec![
+            Material {
+                color: cgmath::vec3(0.2, 0.6, 0.3),
+            },
+            Material {
+                color: cgmath::vec3(0.8, 0.2, 0.1),
+            },
+        ];
         let hyper_spheres = vec![
             HyperSphere {
                 position: cgmath::vec4(3.0, -1001.0, 0.0, 0.0),
-                color: cgmath::vec3(0.2, 0.6, 0.3),
                 radius: 1000.0,
+                material: 0,
             },
             HyperSphere {
                 position: cgmath::vec4(3.0, 0.0, 0.0, 0.0),
-                color: cgmath::vec3(0.8, 0.2, 0.1),
                 radius: 1.0,
+                material: 1,
             },
         ];
-        let hyper_spheres_buffer = BufferGroup::new(
+        let objects_buffer = BufferGroup::new(
             device,
-            "Hyper Spheres",
-            (BufferCreationInfo {
-                buffer: ArrayBuffer::new(
-                    device,
-                    queue,
-                    "Hyper Spheres",
-                    wgpu::BufferUsages::STORAGE,
-                    hyper_spheres
-                        .iter()
-                        .map(GpuHyperSphere::from_hyper_sphere)
-                        .collect::<Vec<_>>()
-                        .as_slice(),
-                ),
-                binding_type: wgpu::BufferBindingType::Storage { read_only: true },
-                visibility: wgpu::ShaderStages::COMPUTE,
-            },),
+            "Objects",
+            (
+                BufferCreationInfo {
+                    buffer: ArrayBuffer::new(
+                        device,
+                        queue,
+                        "Materials",
+                        wgpu::BufferUsages::STORAGE,
+                        materials
+                            .iter()
+                            .map(GpuMaterial::from_material)
+                            .collect::<Vec<_>>()
+                            .as_slice(),
+                    ),
+                    binding_type: wgpu::BufferBindingType::Storage { read_only: true },
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                },
+                BufferCreationInfo {
+                    buffer: ArrayBuffer::new(
+                        device,
+                        queue,
+                        "Hyper Spheres",
+                        wgpu::BufferUsages::STORAGE,
+                        hyper_spheres
+                            .iter()
+                            .map(GpuHyperSphere::from_hyper_sphere)
+                            .collect::<Vec<_>>()
+                            .as_slice(),
+                    ),
+                    binding_type: wgpu::BufferBindingType::Storage { read_only: true },
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                },
+            ),
         );
 
         let ray_tracing_shader =
@@ -99,7 +126,7 @@ impl State {
                 bind_group_layouts: &[
                     &main_texture_output_bind_group_layout,
                     camera_buffer.bind_group_layout(),
-                    hyper_spheres_buffer.bind_group_layout(),
+                    objects_buffer.bind_group_layout(),
                 ],
                 push_constant_ranges: &[],
             });
@@ -172,8 +199,9 @@ impl State {
             camera,
             camera_buffer,
 
+            materials,
             hyper_spheres,
-            hyper_spheres_buffer,
+            objects_buffer,
 
             ray_tracing_pipeline,
             render_pipeline,
@@ -242,16 +270,25 @@ impl State {
             queue,
             (Some(&GpuCamera::from_camera(&self.camera)),),
         );
-        self.hyper_spheres_buffer.write(
+        self.objects_buffer.write(
             device,
             queue,
-            (Some(
-                self.hyper_spheres
-                    .iter()
-                    .map(GpuHyperSphere::from_hyper_sphere)
-                    .collect::<Vec<_>>()
-                    .as_slice(),
-            ),),
+            (
+                Some(
+                    self.materials
+                        .iter()
+                        .map(GpuMaterial::from_material)
+                        .collect::<Vec<_>>()
+                        .as_slice(),
+                ),
+                Some(
+                    self.hyper_spheres
+                        .iter()
+                        .map(GpuHyperSphere::from_hyper_sphere)
+                        .collect::<Vec<_>>()
+                        .as_slice(),
+                ),
+            ),
         );
 
         let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -269,7 +306,7 @@ impl State {
             compute_pass.set_pipeline(&self.ray_tracing_pipeline);
             compute_pass.set_bind_group(0, &self.main_texture_output_bind_group, &[]);
             compute_pass.set_bind_group(1, self.camera_buffer.bind_group(), &[]);
-            compute_pass.set_bind_group(2, self.hyper_spheres_buffer.bind_group(), &[]);
+            compute_pass.set_bind_group(2, self.objects_buffer.bind_group(), &[]);
             compute_pass.dispatch_workgroups(width.div_ceil(16), height.div_ceil(16), 1);
         }
         {

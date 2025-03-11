@@ -1,4 +1,4 @@
-use crate::{camera::Camera, hyper_sphere::HyperSphere};
+use crate::{camera::Camera, hyper_sphere::HyperSphere, material::Material};
 use encase::ShaderType;
 
 #[derive(ShaderType)]
@@ -56,21 +56,33 @@ impl GpuCamera {
 #[derive(ShaderType)]
 pub struct GpuHyperSphere {
     pub position: cgmath::Vector4<f32>,
-    pub color: cgmath::Vector3<f32>,
     pub radius: f32,
+    pub material: u32,
 }
 
 impl GpuHyperSphere {
     pub fn from_hyper_sphere(hyper_sphere: &HyperSphere) -> Self {
         let HyperSphere {
             position,
-            color,
             radius,
+            material,
         } = *hyper_sphere;
         Self {
             position,
-            color,
             radius,
+            material,
         }
+    }
+}
+
+#[derive(ShaderType)]
+pub struct GpuMaterial {
+    pub color: cgmath::Vector3<f32>,
+}
+
+impl GpuMaterial {
+    pub fn from_material(material: &Material) -> Self {
+        let Material { color } = *material;
+        Self { color }
     }
 }
