@@ -101,7 +101,7 @@ impl State {
         }
     }
 
-    pub fn update(&mut self, _delta_time: std::time::Duration) {}
+    pub fn update(&mut self, _dt: std::time::Duration) {}
 
     pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         (

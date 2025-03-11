@@ -9,9 +9,10 @@ use winit::{
 };
 
 struct WindowState {
-    window: Arc<Window>,
     surface: wgpu::Surface<'static>,
     surface_config: wgpu::SurfaceConfiguration,
+    // putting this after because so far it seems to prevent a segfault when closing the program
+    window: Arc<Window>,
 }
 
 struct App {
@@ -45,7 +46,7 @@ impl ApplicationHandler for App {
             format: wgpu::TextureFormat::Bgra8Unorm,
             width: size.width.max(1),
             height: size.height.max(1),
-            present_mode: wgpu::PresentMode::AutoNoVsync,
+            present_mode: wgpu::PresentMode::AutoVsync,
             desired_maximum_frame_latency: 2,
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
             view_formats: vec![],
