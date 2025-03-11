@@ -1,3 +1,8 @@
+use winit::{
+    event::{ElementState, MouseButton},
+    keyboard::KeyCode,
+};
+
 use crate::{
     camera::Camera,
     fixed_size_buffer::{FixedSizeBuffer, create_fixed_size_buffer},
@@ -16,6 +21,8 @@ pub struct State {
 
     ray_tracing_pipeline: wgpu::ComputePipeline,
     render_pipeline: wgpu::RenderPipeline,
+
+    mouse_locked: bool,
 }
 
 impl State {
@@ -124,11 +131,49 @@ impl State {
 
             ray_tracing_pipeline,
             render_pipeline,
+
+            mouse_locked: false,
         }
     }
 
     pub fn update(&mut self, dt: std::time::Duration) {
-        self.camera.xy_rotation += dt.as_secs_f32();
+        let ts = dt.as_secs_f32();
+
+        self.camera.update(ts);
+    }
+
+    pub fn key(&mut self, key: KeyCode, state: ElementState, window: &winit::window::Window) {
+        if let (KeyCode::Escape, ElementState::Pressed) = (key, state) {
+            if self.mouse_locked {
+                _ = window.set_cursor_grab(winit::window::CursorGrabMode::None);
+                window.set_cursor_visible(true);
+                self.mouse_locked = false;
+            } else {
+                _ = window.set_cursor_grab(winit::window::CursorGrabMode::Confined);
+                window.set_cursor_visible(false);
+                self.mouse_locked = true;
+            }
+        }
+
+        self.camera.key(key, state);
+    }
+
+    pub fn mouse(&mut self, _button: MouseButton, _state: ElementState) {}
+
+    pub fn focused(&mut self, focused: bool, window: &winit::window::Window) {
+        if !focused {
+            _ = window.set_cursor_grab(winit::window::CursorGrabMode::None);
+            window.set_cursor_visible(true);
+            self.mouse_locked = false;
+
+            self.camera.reset_keys();
+        }
+    }
+
+    pub fn mouse_moved(&mut self, delta: cgmath::Vector2<f32>) {
+        if self.mouse_locked {
+            self.camera.mouse_moved(delta);
+        }
     }
 
     pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {

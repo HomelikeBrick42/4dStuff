@@ -3,8 +3,9 @@ use std::sync::Arc;
 use ray_tracer::state::State;
 use winit::{
     application::ApplicationHandler,
-    event::WindowEvent,
+    event::{DeviceEvent, KeyEvent, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    keyboard::PhysicalKey,
     window::{Window, WindowId},
 };
 
@@ -18,7 +19,7 @@ struct App {
     instance: wgpu::Instance,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    state: State,
+    state: Option<State>,
     window_state: Option<WindowState>,
     last_frame_time: Option<std::time::Instant>,
     delta_time: std::time::Duration,
@@ -59,6 +60,10 @@ impl ApplicationHandler for App {
         });
     }
 
+    fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
+        self.window_state = None;
+    }
+
     fn new_events(&mut self, _event_loop: &ActiveEventLoop, _cause: winit::event::StartCause) {
         let time = std::time::Instant::now();
         self.delta_time = time.duration_since(self.last_frame_time.unwrap_or(time));
@@ -66,11 +71,34 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        self.state.update(self.delta_time);
+        let state = self
+            .state
+            .as_mut()
+            .expect("the state should exist unless the app is exiting");
+        state.update(self.delta_time);
     }
 
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
-        self.window_state = None;
+        if let Some(window_state) = self.window_state.take() {
+            window_state.window.set_visible(false);
+        }
+        self.state = None;
+    }
+
+    fn device_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _device_id: winit::event::DeviceId,
+        event: DeviceEvent,
+    ) {
+        let state = self
+            .state
+            .as_mut()
+            .expect("the state should exist unless the app is exiting");
+
+        if let DeviceEvent::MouseMotion { delta: (x, y) } = event {
+            state.mouse_moved(cgmath::vec2(x as f32, y as f32))
+        }
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
@@ -85,17 +113,21 @@ impl ApplicationHandler for App {
             .expect("if there is a window event the window should have been created");
         assert_eq!(window.id(), id);
 
+        let state = self
+            .state
+            .as_mut()
+            .expect("the state should exist unless the app is exiting");
+
         let mut resized = |surface_config: &mut wgpu::SurfaceConfiguration,
                            size: winit::dpi::PhysicalSize<u32>| {
             surface_config.width = size.width.max(1);
             surface_config.height = size.height.max(1);
             surface.configure(&self.device, surface_config);
-            self.state
-                .resize(&self.device, surface_config.width, surface_config.height);
+            state.resize(&self.device, surface_config.width, surface_config.height);
         };
 
         match event {
-            WindowEvent::CloseRequested => {
+            WindowEvent::Destroyed | WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
 
@@ -126,13 +158,33 @@ impl ApplicationHandler for App {
                     }
                 };
 
-                self.state
-                    .render(&self.device, &self.queue, &surface_texture.texture);
+                state.render(&self.device, &self.queue, &surface_texture.texture);
 
                 window.pre_present_notify();
                 surface_texture.present();
                 window.request_redraw();
             }
+
+            WindowEvent::Focused(focused) => {
+                state.focused(focused, window);
+            }
+
+            WindowEvent::KeyboardInput {
+                device_id: _,
+                event:
+                    KeyEvent {
+                        physical_key: PhysicalKey::Code(key),
+                        state: key_state,
+                        ..
+                    },
+                is_synthetic: _,
+            } => state.key(key, key_state, window),
+
+            WindowEvent::MouseInput {
+                device_id: _,
+                state: button_state,
+                button,
+            } => state.mouse(button, button_state),
 
             _ => {}
         }
@@ -171,7 +223,7 @@ fn main() {
             instance,
             device,
             queue,
-            state,
+            state: Some(state),
             window_state: None,
             last_frame_time: None,
             delta_time: std::time::Duration::ZERO,

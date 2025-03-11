@@ -20,6 +20,11 @@ impl GpuCamera {
         let Camera {
             position,
 
+            forward_movement: _,
+            up_movement: _,
+            right_movement: _,
+            ana_movement: _,
+
             base_rotation: _,
             volume_mode: _,
             volume_mode_percentage: _,
