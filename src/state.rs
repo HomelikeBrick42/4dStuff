@@ -1,11 +1,8 @@
 use crate::{
-    Camera,
+    camera::Camera,
     fixed_size_buffer::{FixedSizeBuffer, create_fixed_size_buffer},
-    state::gpu_camera::GpuCamera,
+    gpu_types::GpuCamera,
 };
-use cgmath::Zero;
-
-mod gpu_camera;
 
 pub struct State {
     main_texture_output_bind_group_layout: wgpu::BindGroupLayout,
@@ -34,15 +31,7 @@ impl State {
                 &main_texture_render_bind_group_layout,
             );
 
-        let camera = Camera {
-            position: cgmath::Vector4::zero(),
-            sun_direction: cgmath::vec4(-0.2, 1.0, 0.1, 0.0),
-            sun_color: cgmath::vec3(0.9, 0.8, 0.7),
-            sun_light_color: cgmath::vec3(1.0, 1.0, 1.0),
-            ambient_light_color: cgmath::vec3(0.1, 0.1, 0.1),
-            up_sky_color: cgmath::vec3(0.5, 0.5, 0.9),
-            down_sky_color: cgmath::vec3(0.2, 0.2, 0.2),
-        };
+        let camera = Camera::default();
         let camera_buffer = create_fixed_size_buffer!(
             device,
             queue,
@@ -138,7 +127,9 @@ impl State {
         }
     }
 
-    pub fn update(&mut self, _dt: std::time::Duration) {}
+    pub fn update(&mut self, dt: std::time::Duration) {
+        self.camera.xy_rotation += dt.as_secs_f32();
+    }
 
     pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         (

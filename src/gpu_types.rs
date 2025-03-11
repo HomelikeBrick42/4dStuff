@@ -1,4 +1,4 @@
-use crate::{Camera, FORWARD, RIGHT, UP};
+use crate::camera::Camera;
 use encase::ShaderType;
 
 #[derive(ShaderType)]
@@ -19,6 +19,12 @@ impl GpuCamera {
     pub fn from_camera(camera: &Camera) -> Self {
         let Camera {
             position,
+
+            base_rotation: _,
+            volume_mode: _,
+            volume_mode_percentage: _,
+            xy_rotation: _,
+
             sun_direction,
             sun_color,
             sun_light_color,
@@ -26,11 +32,12 @@ impl GpuCamera {
             up_sky_color,
             down_sky_color,
         } = *camera;
+        let rotation = camera.get_rotation();
         Self {
             position,
-            forward: FORWARD,
-            up: UP,
-            right: RIGHT,
+            forward: rotation.rotate(Camera::FORWARD),
+            up: rotation.rotate(Camera::UP),
+            right: rotation.rotate(Camera::RIGHT),
             sun_direction,
             sun_color,
             sun_light_color,
