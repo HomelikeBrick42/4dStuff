@@ -99,12 +99,17 @@ impl Camera {
     pub fn mouse_moved(&mut self, delta: cgmath::Vector2<f32>) {
         let sensitivity = 0.01;
 
-        self.xy_rotation -= delta.y * sensitivity;
-        self.xy_rotation = self
-            .xy_rotation
-            .clamp(-core::f32::consts::FRAC_PI_2, core::f32::consts::FRAC_PI_2);
+        if self.volume_mode {
+            self.base_rotation = self.base_rotation * Rotor::rotation_xz(delta.x * sensitivity);
+            self.base_rotation = self.base_rotation * Rotor::rotation_xw(delta.y * sensitivity);
+        } else {
+            self.xy_rotation -= delta.y * sensitivity;
+            self.xy_rotation = self
+                .xy_rotation
+                .clamp(-core::f32::consts::FRAC_PI_2, core::f32::consts::FRAC_PI_2);
 
-        self.base_rotation = self.base_rotation * Rotor::rotation_xz(delta.x * sensitivity);
+            self.base_rotation = self.base_rotation * Rotor::rotation_xz(delta.x * sensitivity);
+        }
     }
 }
 
