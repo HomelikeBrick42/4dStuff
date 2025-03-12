@@ -111,7 +111,7 @@ impl Rotor {
         }
     }
 
-    pub fn rotate(self, normal: cgmath::Vector4<f32>) -> cgmath::Vector4<f32> {
+    pub fn rotate(self, direction: cgmath::Vector4<f32>) -> cgmath::Vector4<f32> {
         let Self {
             s: a,
             e12: b,
@@ -127,7 +127,7 @@ impl Rotor {
             y: p2,
             z: p1,
             w: p0,
-        } = normal;
+        } = direction;
         let ap2 = a * p2;
         let bp3 = b * p3;
         let ep1 = e * p1;
