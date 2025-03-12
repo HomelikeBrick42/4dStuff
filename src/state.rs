@@ -1,14 +1,13 @@
-use winit::{
-    event::{ElementState, MouseButton},
-    keyboard::KeyCode,
-};
-
 use crate::{
     camera::Camera,
     gpu_buffers::{ArrayBuffer, BufferCreationInfo, BufferGroup, FixedSizeBuffer},
     gpu_types::{GpuCamera, GpuHyperSphere, GpuMaterial},
     hyper_sphere::HyperSphere,
     material::Material,
+};
+use winit::{
+    event::{ElementState, MouseButton},
+    keyboard::KeyCode,
 };
 
 pub struct State {

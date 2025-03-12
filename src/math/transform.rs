@@ -83,6 +83,37 @@ impl Transform {
         }
     }
 
+    pub const fn rotor_part(self) -> Rotor {
+        let Self {
+            s,
+            e01: _,
+            e02: _,
+            e03: _,
+            e04: _,
+            e12,
+            e13,
+            e14,
+            e23,
+            e24,
+            e34,
+            e0123: _,
+            e0124: _,
+            e0134: _,
+            e0234: _,
+            e1234,
+        } = self;
+        Rotor {
+            s,
+            e12,
+            e13,
+            e14,
+            e23,
+            e24,
+            e34,
+            e1234,
+        }
+    }
+
     pub fn rotation_xy(angle: f32) -> Self {
         let (sin, cos) = (angle * 0.5).sin_cos();
         Self {
@@ -258,62 +289,6 @@ impl Transform {
                     + i * s3
                     + h * s2
                     + g * s0),
-        ];
-        result.reverse();
-        let [x, y, z, w] = result;
-        cgmath::Vector4 { x, y, z, w }
-    }
-
-    pub fn transform_direction(self, normal: cgmath::Vector4<f32>) -> cgmath::Vector4<f32> {
-        let Self {
-            s: a,
-            e01: _,
-            e02: _,
-            e03: _,
-            e04: _,
-            e12: f,
-            e13: g,
-            e14: h,
-            e23: i,
-            e24: j,
-            e34: k,
-            e0123: _,
-            e0124: _,
-            e0134: _,
-            e0234: _,
-            e1234: p,
-        } = self;
-        let cgmath::Vector4 {
-            x: p3,
-            y: p2,
-            z: p1,
-            w: p0,
-        } = normal;
-        let ap2 = a * p2;
-        let fp3 = f * p3;
-        let ip1 = i * p1;
-        let jp0 = j * p0;
-        let ap3 = a * p3;
-        let fp2 = f * p2;
-        let gp1 = g * p1;
-        let hp0 = h * p0;
-        let ap1 = a * p1;
-        let kp0 = k * p0;
-        let gp3 = g * p3;
-        let ip2 = i * p2;
-        let ap0 = a * p0;
-        let kp1 = k * p1;
-        let hp3 = h * p3;
-        let jp2 = j * p2;
-        let s0 = ip1 - ap2 - fp3 - jp0;
-        let s1 = ap3 + gp1 - fp2 - hp0;
-        let s2 = ap1 + ip2 - kp0 - gp3;
-        let s3 = jp2 - ap0 - kp1 - hp3;
-        let mut result = [
-            p0 + 2.0 * (p * (f * p1 + g * p2 + i * p3 - p * p0) + j * s0 + h * s1 + k * s2),
-            p1 + 2.0 * (p * (h * p2 + j * p3 - p * p1 - f * p0) + k * s3 - i * s0 - g * s1),
-            p2 + 2.0 * (p * (k * p3 - p * p2 - g * p0 - h * p1) + f * s1 - j * s3 - i * s2),
-            p3 + 2.0 * (h * s3 + g * s2 + f * s0 - p * (k * p2 + p * p3 + i * p0 + j * p1)),
         ];
         result.reverse();
         let [x, y, z, w] = result;
