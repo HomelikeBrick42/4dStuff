@@ -1,4 +1,4 @@
-use crate::rotor::Rotor;
+use crate::math::Rotor;
 use cgmath::Zero;
 use winit::{event::ElementState, keyboard::KeyCode};
 
