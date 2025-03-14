@@ -25,7 +25,8 @@ pub struct State {
     objects_buffer: BufferGroup<(ArrayBuffer<GpuMaterial>, ArrayBuffer<GpuHyperSphere>)>,
 
     ray_tracing_pipeline: wgpu::ComputePipeline,
-    render_pipeline: wgpu::RenderPipeline,
+    ray_tracing_render_pipeline: wgpu::RenderPipeline,
+    lines_render_pipeline: wgpu::RenderPipeline,
 
     mouse_locked: bool,
 }
@@ -141,52 +142,102 @@ impl State {
 
         let full_screen_quad_shader =
             device.create_shader_module(wgpu::include_wgsl!("./shaders/full_screen_quad.wgsl"));
-        let render_pipeline_layout =
+        let ray_tracing_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Render Pipeline Layout"),
+                label: Some("Ray Tracing Render Pipeline Layout"),
                 bind_group_layouts: &[&main_texture_render_bind_group_layout],
                 push_constant_ranges: &[],
             });
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(&render_pipeline_layout),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleStrip,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                unclipped_depth: false,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                conservative: false,
-            },
-            vertex: wgpu::VertexState {
-                module: &full_screen_quad_shader,
-                entry_point: Some("vertex"),
-                buffers: &[],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &full_screen_quad_shader,
-                entry_point: Some("fragment"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Bgra8Unorm,
-                    blend: Some(wgpu::BlendState {
-                        color: wgpu::BlendComponent::REPLACE,
-                        alpha: wgpu::BlendComponent::REPLACE,
-                    }),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            }),
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            multiview: None,
-            cache: None,
-        });
+        let ray_tracing_render_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Ray Tracing Render Pipeline"),
+                layout: Some(&ray_tracing_pipeline_layout),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleStrip,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: Some(wgpu::Face::Back),
+                    unclipped_depth: false,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    conservative: false,
+                },
+                vertex: wgpu::VertexState {
+                    module: &full_screen_quad_shader,
+                    entry_point: Some("vertex"),
+                    buffers: &[],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &full_screen_quad_shader,
+                    entry_point: Some("fragment"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Bgra8Unorm,
+                        blend: Some(wgpu::BlendState {
+                            color: wgpu::BlendComponent::REPLACE,
+                            alpha: wgpu::BlendComponent::REPLACE,
+                        }),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                }),
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                multiview: None,
+                cache: None,
+            });
+
+        let lines_shader = device.create_shader_module(wgpu::include_wgsl!("./shaders/lines.wgsl"));
+        let lines_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Lines Render Pipeline Layout"),
+                bind_group_layouts: &[],
+                push_constant_ranges: &[],
+            });
+        let lines_render_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Lines Render Pipeline"),
+                layout: Some(&lines_pipeline_layout),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleStrip,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: Some(wgpu::Face::Back),
+                    unclipped_depth: false,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    conservative: false,
+                },
+                vertex: wgpu::VertexState {
+                    module: &lines_shader,
+                    entry_point: Some("vertex"),
+                    buffers: &[],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &lines_shader,
+                    entry_point: Some("fragment"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Bgra8Unorm,
+                        blend: Some(wgpu::BlendState {
+                            color: wgpu::BlendComponent::OVER,
+                            alpha: wgpu::BlendComponent::OVER,
+                        }),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                }),
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                multiview: None,
+                cache: None,
+            });
 
         State {
             main_texture_output_bind_group_layout,
@@ -203,7 +254,8 @@ impl State {
             objects_buffer,
 
             ray_tracing_pipeline,
-            render_pipeline,
+            ray_tracing_render_pipeline,
+            lines_render_pipeline,
 
             mouse_locked: false,
         }
@@ -334,8 +386,11 @@ impl State {
                 ..Default::default()
             });
 
-            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_pipeline(&self.ray_tracing_render_pipeline);
             render_pass.set_bind_group(0, &self.main_texture_render_bind_group, &[]);
+            render_pass.draw(0..4, 0..1);
+
+            render_pass.set_pipeline(&self.lines_render_pipeline);
             render_pass.draw(0..4, 0..1);
         }
         queue.submit(std::iter::once(command_encoder.finish()));
