@@ -1,10 +1,11 @@
 use crate::{
     camera::Camera,
-    gpu_buffers::{ArrayBuffer, BufferCreationInfo, BufferGroup, FixedSizeBuffer},
-    gpu_types::{GpuCamera, GpuHyperSphere, GpuLine, GpuMaterial, GpuUiInfo},
+    gpu_buffers::{BufferCreationInfo, BufferGroup, DynamicBuffer, FixedSizeBuffer},
+    gpu_types::{GpuCamera, GpuHyperSphere, GpuLengthArray, GpuLine, GpuMaterial, GpuUiInfo},
     hyper_sphere::HyperSphere,
     material::Material,
 };
+use encase::ArrayLength;
 use winit::{
     event::{ElementState, MouseButton},
     keyboard::KeyCode,
@@ -22,9 +23,13 @@ pub struct State {
 
     materials: Vec<Material>,
     hyper_spheres: Vec<HyperSphere>,
-    objects_buffer: BufferGroup<(ArrayBuffer<GpuMaterial>, ArrayBuffer<GpuHyperSphere>)>,
+    #[expect(clippy::type_complexity)]
+    objects_buffer: BufferGroup<(
+        DynamicBuffer<Vec<GpuMaterial>>,
+        DynamicBuffer<GpuLengthArray<GpuHyperSphere>>,
+    )>,
 
-    ui_buffer: BufferGroup<(FixedSizeBuffer<GpuUiInfo>, ArrayBuffer<GpuLine>)>,
+    ui_buffer: BufferGroup<(FixedSizeBuffer<GpuUiInfo>, DynamicBuffer<Vec<GpuLine>>)>,
 
     ray_tracing_pipeline: wgpu::ComputePipeline,
     ray_tracing_render_pipeline: wgpu::RenderPipeline,
@@ -88,31 +93,32 @@ impl State {
             "Objects",
             (
                 BufferCreationInfo {
-                    buffer: ArrayBuffer::new(
+                    buffer: DynamicBuffer::new(
                         device,
                         queue,
                         "Materials",
                         wgpu::BufferUsages::STORAGE,
-                        materials
+                        &materials
                             .iter()
                             .map(GpuMaterial::from_material)
-                            .collect::<Vec<_>>()
-                            .as_slice(),
+                            .collect::<Vec<_>>(),
                     ),
                     binding_type: wgpu::BufferBindingType::Storage { read_only: true },
                     visibility: wgpu::ShaderStages::COMPUTE,
                 },
                 BufferCreationInfo {
-                    buffer: ArrayBuffer::new(
+                    buffer: DynamicBuffer::new(
                         device,
                         queue,
                         "Hyper Spheres",
                         wgpu::BufferUsages::STORAGE,
-                        hyper_spheres
-                            .iter()
-                            .map(GpuHyperSphere::from_hyper_sphere)
-                            .collect::<Vec<_>>()
-                            .as_slice(),
+                        &GpuLengthArray {
+                            length: ArrayLength,
+                            data: hyper_spheres
+                                .iter()
+                                .map(GpuHyperSphere::from_hyper_sphere)
+                                .collect::<Vec<_>>(),
+                        },
                     ),
                     binding_type: wgpu::BufferBindingType::Storage { read_only: true },
                     visibility: wgpu::ShaderStages::COMPUTE,
@@ -136,12 +142,12 @@ impl State {
                     visibility: wgpu::ShaderStages::VERTEX,
                 },
                 BufferCreationInfo {
-                    buffer: ArrayBuffer::new(
+                    buffer: DynamicBuffer::new(
                         device,
                         queue,
                         "Lines",
                         wgpu::BufferUsages::STORAGE,
-                        &[],
+                        &vec![],
                     ),
                     binding_type: wgpu::BufferBindingType::Storage { read_only: true },
                     visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
@@ -365,19 +371,20 @@ impl State {
             queue,
             (
                 Some(
-                    self.materials
+                    &self
+                        .materials
                         .iter()
                         .map(GpuMaterial::from_material)
-                        .collect::<Vec<_>>()
-                        .as_slice(),
+                        .collect::<Vec<_>>(),
                 ),
-                Some(
-                    self.hyper_spheres
+                Some(&GpuLengthArray {
+                    length: ArrayLength,
+                    data: self
+                        .hyper_spheres
                         .iter()
                         .map(GpuHyperSphere::from_hyper_sphere)
-                        .collect::<Vec<_>>()
-                        .as_slice(),
-                ),
+                        .collect::<Vec<_>>(),
+                }),
             ),
         );
 
@@ -424,7 +431,7 @@ impl State {
             let info = GpuUiInfo {
                 aspect: width as f32 / height as f32,
             };
-            let lines = [
+            let lines = vec![
                 GpuLine {
                     a: cgmath::vec2(0.05, 0.0),
                     b: cgmath::vec2(-0.05, 0.0),

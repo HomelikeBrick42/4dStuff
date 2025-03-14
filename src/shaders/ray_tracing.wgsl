@@ -22,7 +22,6 @@ struct Material {
 }
 
 struct Materials {
-    length: u32,
     data: array<Material>,
 }
 

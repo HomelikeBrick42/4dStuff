@@ -13,7 +13,6 @@ struct Line {
 }
 
 struct Lines {
-    length: u32,
     data: array<Line>,
 }
 

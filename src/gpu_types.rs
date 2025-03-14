@@ -1,5 +1,12 @@
 use crate::{camera::Camera, hyper_sphere::HyperSphere, material::Material};
-use encase::ShaderType;
+use encase::{ArrayLength, ShaderSize, ShaderType};
+
+#[derive(ShaderType)]
+pub struct GpuLengthArray<T: ShaderSize> {
+    pub length: ArrayLength,
+    #[size(runtime)]
+    pub data: Vec<T>,
+}
 
 #[derive(ShaderType)]
 pub struct GpuCamera {
