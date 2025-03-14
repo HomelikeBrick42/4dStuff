@@ -35,7 +35,7 @@ fn vertex(@builtin(vertex_index) vertex_index: u32, @builtin(instance_index) ins
 
     let line = lines.data[instance_index];
     let a_to_b = line.b - line.a;
-    let normal = vec2<f32>(a_to_b.y, - a_to_b.x);
+    let normal = normalize(vec2<f32>(a_to_b.y, - a_to_b.x));
 
     var point = mix(line.a, line.b, x) + normal * y * line.width;
     point.x /= info.aspect;

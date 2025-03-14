@@ -428,13 +428,13 @@ impl State {
                 GpuLine {
                     a: cgmath::vec2(0.05, 0.0),
                     b: cgmath::vec2(-0.05, 0.0),
-                    width: 0.05,
+                    width: 0.01,
                     color: cgmath::vec4(0.0, 0.0, 0.0, 1.0),
                 },
                 GpuLine {
                     a: cgmath::vec2(0.0, 0.05),
                     b: cgmath::vec2(0.0, -0.05),
-                    width: 0.05,
+                    width: 0.01,
                     color: cgmath::vec4(0.0, 0.0, 0.0, 1.0),
                 },
             ];
