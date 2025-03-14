@@ -1,7 +1,7 @@
 use crate::{
     camera::Camera,
     gpu_buffers::{ArrayBuffer, BufferCreationInfo, BufferGroup, FixedSizeBuffer},
-    gpu_types::{GpuCamera, GpuHyperSphere, GpuMaterial},
+    gpu_types::{GpuCamera, GpuHyperSphere, GpuLine, GpuMaterial, GpuUiInfo},
     hyper_sphere::HyperSphere,
     material::Material,
 };
@@ -24,9 +24,11 @@ pub struct State {
     hyper_spheres: Vec<HyperSphere>,
     objects_buffer: BufferGroup<(ArrayBuffer<GpuMaterial>, ArrayBuffer<GpuHyperSphere>)>,
 
+    ui_buffer: BufferGroup<(FixedSizeBuffer<GpuUiInfo>, ArrayBuffer<GpuLine>)>,
+
     ray_tracing_pipeline: wgpu::ComputePipeline,
     ray_tracing_render_pipeline: wgpu::RenderPipeline,
-    lines_render_pipeline: wgpu::RenderPipeline,
+    ui_render_pipeline: wgpu::RenderPipeline,
 
     mouse_locked: bool,
 }
@@ -118,6 +120,35 @@ impl State {
             ),
         );
 
+        let ui_buffer = BufferGroup::new(
+            device,
+            "UI",
+            (
+                BufferCreationInfo {
+                    buffer: FixedSizeBuffer::new(
+                        device,
+                        queue,
+                        "Info",
+                        wgpu::BufferUsages::UNIFORM,
+                        &GpuUiInfo { aspect: 1.0 },
+                    ),
+                    binding_type: wgpu::BufferBindingType::Uniform,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                },
+                BufferCreationInfo {
+                    buffer: ArrayBuffer::new(
+                        device,
+                        queue,
+                        "Lines",
+                        wgpu::BufferUsages::STORAGE,
+                        &[],
+                    ),
+                    binding_type: wgpu::BufferBindingType::Storage { read_only: true },
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                },
+            ),
+        );
+
         let ray_tracing_shader =
             device.create_shader_module(wgpu::include_wgsl!("./shaders/ray_tracing.wgsl"));
         let ray_tracing_pipeline_layout =
@@ -190,54 +221,52 @@ impl State {
                 cache: None,
             });
 
-        let lines_shader = device.create_shader_module(wgpu::include_wgsl!("./shaders/lines.wgsl"));
-        let lines_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Lines Render Pipeline Layout"),
-                bind_group_layouts: &[],
-                push_constant_ranges: &[],
-            });
-        let lines_render_pipeline =
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("Lines Render Pipeline"),
-                layout: Some(&lines_pipeline_layout),
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleStrip,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: Some(wgpu::Face::Back),
-                    unclipped_depth: false,
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    conservative: false,
-                },
-                vertex: wgpu::VertexState {
-                    module: &lines_shader,
-                    entry_point: Some("vertex"),
-                    buffers: &[],
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &lines_shader,
-                    entry_point: Some("fragment"),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Bgra8Unorm,
-                        blend: Some(wgpu::BlendState {
-                            color: wgpu::BlendComponent::OVER,
-                            alpha: wgpu::BlendComponent::OVER,
-                        }),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                }),
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState {
-                    count: 1,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
-                multiview: None,
-                cache: None,
-            });
+        let ui_shader = device.create_shader_module(wgpu::include_wgsl!("./shaders/lines.wgsl"));
+        let ui_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("UI Pipeline Layout"),
+            bind_group_layouts: &[ui_buffer.bind_group_layout()],
+            push_constant_ranges: &[],
+        });
+        let ui_render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("UI Pipeline"),
+            layout: Some(&ui_pipeline_layout),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            vertex: wgpu::VertexState {
+                module: &ui_shader,
+                entry_point: Some("vertex"),
+                buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &ui_shader,
+                entry_point: Some("fragment"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent::OVER,
+                        alpha: wgpu::BlendComponent::OVER,
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+            cache: None,
+        });
 
         State {
             main_texture_output_bind_group_layout,
@@ -253,9 +282,11 @@ impl State {
             hyper_spheres,
             objects_buffer,
 
+            ui_buffer,
+
             ray_tracing_pipeline,
             ray_tracing_render_pipeline,
-            lines_render_pipeline,
+            ui_render_pipeline,
 
             mouse_locked: false,
         }
@@ -322,6 +353,8 @@ impl State {
     }
 
     pub fn render(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Texture) {
+        let wgpu::Extent3d { width, height, .. } = self.main_texture.size();
+
         self.camera_buffer.write(
             device,
             queue,
@@ -358,8 +391,6 @@ impl State {
                     timestamp_writes: None,
                 });
 
-            let wgpu::Extent3d { width, height, .. } = self.main_texture.size();
-
             compute_pass.set_pipeline(&self.ray_tracing_pipeline);
             compute_pass.set_bind_group(0, &self.main_texture_output_bind_group, &[]);
             compute_pass.set_bind_group(1, self.camera_buffer.bind_group(), &[]);
@@ -390,8 +421,35 @@ impl State {
             render_pass.set_bind_group(0, &self.main_texture_render_bind_group, &[]);
             render_pass.draw(0..4, 0..1);
 
-            render_pass.set_pipeline(&self.lines_render_pipeline);
-            render_pass.draw(0..4, 0..1);
+            let info = GpuUiInfo {
+                aspect: width as f32 / height as f32,
+            };
+            let lines = [
+                GpuLine {
+                    a: cgmath::vec2(0.05, 0.0),
+                    b: cgmath::vec2(-0.05, 0.0),
+                    width: 0.05,
+                    color: cgmath::vec4(0.0, 0.0, 0.0, 1.0),
+                },
+                GpuLine {
+                    a: cgmath::vec2(0.0, 0.05),
+                    b: cgmath::vec2(0.0, -0.05),
+                    width: 0.05,
+                    color: cgmath::vec4(0.0, 0.0, 0.0, 1.0),
+                },
+            ];
+            self.ui_buffer
+                .write(device, queue, (Some(&info), Some(&lines)));
+
+            render_pass.set_pipeline(&self.ui_render_pipeline);
+            render_pass.set_bind_group(0, self.ui_buffer.bind_group(), &[]);
+            render_pass.draw(
+                0..4,
+                0..lines
+                    .len()
+                    .try_into()
+                    .expect("there should be less than u32::MAX lines"),
+            );
         }
         queue.submit(std::iter::once(command_encoder.finish()));
     }

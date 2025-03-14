@@ -86,3 +86,16 @@ impl GpuMaterial {
         Self { color }
     }
 }
+
+#[derive(ShaderType)]
+pub struct GpuUiInfo {
+    pub aspect: f32,
+}
+
+#[derive(ShaderType)]
+pub struct GpuLine {
+    pub a: cgmath::Vector2<f32>,
+    pub b: cgmath::Vector2<f32>,
+    pub width: f32,
+    pub color: cgmath::Vector4<f32>,
+}
