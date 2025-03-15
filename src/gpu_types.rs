@@ -1,5 +1,12 @@
 use crate::{camera::Camera, hyper_sphere::HyperSphere, material::Material};
-use encase::ShaderType;
+use encase::{ArrayLength, ShaderSize, ShaderType};
+
+#[derive(ShaderType)]
+pub struct GpuLengthArray<T: ShaderSize> {
+    pub length: ArrayLength,
+    #[size(runtime)]
+    pub data: Vec<T>,
+}
 
 #[derive(ShaderType)]
 pub struct GpuCamera {
@@ -85,4 +92,17 @@ impl GpuMaterial {
         let Material { color } = *material;
         Self { color }
     }
+}
+
+#[derive(ShaderType)]
+pub struct GpuUiInfo {
+    pub aspect: f32,
+}
+
+#[derive(ShaderType)]
+pub struct GpuLine {
+    pub a: cgmath::Vector2<f32>,
+    pub b: cgmath::Vector2<f32>,
+    pub width: f32,
+    pub color: cgmath::Vector4<f32>,
 }

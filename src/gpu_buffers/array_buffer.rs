@@ -1,31 +1,26 @@
 use crate::gpu_buffers::Buffer;
-use encase::{ArrayLength, ShaderSize, ShaderType, StorageBuffer, internal::WriteInto};
+use encase::{ShaderType, StorageBuffer, internal::WriteInto};
 use std::marker::PhantomData;
 
-pub struct ArrayBuffer<T> {
+pub struct DynamicBuffer<T> {
     name: &'static str,
     buffer: wgpu::Buffer,
     _data: PhantomData<T>,
 }
 
-impl<T: ShaderSize + WriteInto + 'static> ArrayBuffer<T> {
+impl<T: ShaderType + WriteInto> DynamicBuffer<T> {
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         name: &'static str,
         usage: wgpu::BufferUsages,
-        data: &[T],
+        data: &T,
     ) -> Self {
         let mut this = Self {
             name,
             buffer: device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(name),
-                size: GpuData {
-                    length: ArrayLength,
-                    data,
-                }
-                .size()
-                .get(),
+                size: data.size().get(),
                 usage: usage | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             }),
@@ -36,18 +31,11 @@ impl<T: ShaderSize + WriteInto + 'static> ArrayBuffer<T> {
     }
 }
 
-#[derive(ShaderType)]
-struct GpuData<'a, T: ShaderSize + 'a> {
-    length: ArrayLength,
-    #[size(runtime)]
-    data: &'a [T],
-}
-
-impl<T: ShaderSize + WriteInto + 'static> Buffer for ArrayBuffer<T> {
-    type Data = [T];
+impl<T: ShaderType + WriteInto> Buffer for DynamicBuffer<T> {
+    type Data = T;
 
     fn min_size() -> std::num::NonZero<wgpu::BufferAddress> {
-        GpuData::<'static, T>::min_size()
+        T::min_size()
     }
 
     fn buffer(&self) -> &wgpu::Buffer {
@@ -55,11 +43,6 @@ impl<T: ShaderSize + WriteInto + 'static> Buffer for ArrayBuffer<T> {
     }
 
     fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, data: &Self::Data) -> bool {
-        let data = GpuData {
-            length: ArrayLength,
-            data,
-        };
-
         let new_size = data.size();
         let should_resize = new_size.get() > self.buffer.size();
         if should_resize {

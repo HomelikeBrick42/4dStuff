@@ -7,7 +7,7 @@ pub struct FixedSizeBuffer<T> {
     _data: PhantomData<T>,
 }
 
-impl<T: ShaderSize + WriteInto + 'static> FixedSizeBuffer<T> {
+impl<T: ShaderSize + WriteInto> FixedSizeBuffer<T> {
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -29,7 +29,7 @@ impl<T: ShaderSize + WriteInto + 'static> FixedSizeBuffer<T> {
     }
 }
 
-impl<T: ShaderSize + WriteInto + 'static> Buffer for FixedSizeBuffer<T> {
+impl<T: ShaderSize + WriteInto> Buffer for FixedSizeBuffer<T> {
     type Data = T;
 
     fn min_size() -> std::num::NonZero<wgpu::BufferAddress> {
