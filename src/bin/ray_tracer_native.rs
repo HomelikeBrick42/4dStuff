@@ -42,7 +42,7 @@ impl ApplicationHandler for App {
             .create_surface(window.clone())
             .expect("surface should be created successfully");
         let surface_config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            usage: wgpu::TextureUsages::COPY_DST,
             format: wgpu::TextureFormat::Bgra8Unorm,
             width: size.width.max(1),
             height: size.height.max(1),

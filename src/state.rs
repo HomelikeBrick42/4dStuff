@@ -11,13 +11,9 @@ use winit::{
     keyboard::KeyCode,
 };
 
-pub struct State {
-    main_texture_output_bind_group_layout: wgpu::BindGroupLayout,
-    main_texture_render_bind_group_layout: wgpu::BindGroupLayout,
-    main_texture: wgpu::Texture,
-    main_texture_output_bind_group: wgpu::BindGroup,
-    main_texture_render_bind_group: wgpu::BindGroup,
+const RENDER_SAMPLES: u32 = 4;
 
+pub struct State {
     camera: Camera,
     camera_buffer: BufferGroup<(FixedSizeBuffer<GpuCamera>,)>,
 
@@ -31,26 +27,23 @@ pub struct State {
 
     ui_buffer: BufferGroup<(FixedSizeBuffer<GpuUiInfo>, DynamicBuffer<Vec<GpuLine>>)>,
 
+    ray_tracing_texture_output_bind_group_layout: wgpu::BindGroupLayout,
+    ray_tracing_texture_render_bind_group_layout: wgpu::BindGroupLayout,
+    ray_tracing_texture: wgpu::Texture,
+    ray_tracing_texture_output_bind_group: wgpu::BindGroup,
+    ray_tracing_texture_render_bind_group: wgpu::BindGroup,
     ray_tracing_pipeline: wgpu::ComputePipeline,
+
     ray_tracing_render_pipeline: wgpu::RenderPipeline,
     ui_render_pipeline: wgpu::RenderPipeline,
+
+    final_texture: wgpu::Texture,
 
     mouse_locked: bool,
 }
 
 impl State {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> State {
-        let (main_texture_output_bind_group_layout, main_texture_render_bind_group_layout) =
-            main_texture_bind_group_layouts(device);
-        let (main_texture, main_texture_output_bind_group, main_texture_render_bind_group) =
-            main_texture_and_bind_groups(
-                device,
-                1,
-                1,
-                &main_texture_output_bind_group_layout,
-                &main_texture_render_bind_group_layout,
-            );
-
         let camera = Camera::default();
         let camera_buffer = BufferGroup::new(
             device,
@@ -155,13 +148,29 @@ impl State {
             ),
         );
 
+        let (
+            ray_tracing_texture_output_bind_group_layout,
+            ray_tracing_texture_render_bind_group_layout,
+        ) = ray_tracing_texture_bind_group_layouts(device);
+        let (
+            ray_tracing_texture,
+            ray_tracing_texture_output_bind_group,
+            ray_tracing_texture_render_bind_group,
+        ) = ray_tracing_texture_and_bind_groups(
+            device,
+            1,
+            1,
+            &ray_tracing_texture_output_bind_group_layout,
+            &ray_tracing_texture_render_bind_group_layout,
+        );
+
         let ray_tracing_shader =
             device.create_shader_module(wgpu::include_wgsl!("./shaders/ray_tracing.wgsl"));
         let ray_tracing_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Ray Tracing Pipeline Layout"),
                 bind_group_layouts: &[
-                    &main_texture_output_bind_group_layout,
+                    &ray_tracing_texture_output_bind_group_layout,
                     camera_buffer.bind_group_layout(),
                     objects_buffer.bind_group_layout(),
                 ],
@@ -182,7 +191,7 @@ impl State {
         let ray_tracing_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Ray Tracing Render Pipeline Layout"),
-                bind_group_layouts: &[&main_texture_render_bind_group_layout],
+                bind_group_layouts: &[&ray_tracing_texture_render_bind_group_layout],
                 push_constant_ranges: &[],
             });
         let ray_tracing_render_pipeline =
@@ -219,7 +228,7 @@ impl State {
                 }),
                 depth_stencil: None,
                 multisample: wgpu::MultisampleState {
-                    count: 1,
+                    count: RENDER_SAMPLES,
                     mask: !0,
                     alpha_to_coverage_enabled: false,
                 },
@@ -266,7 +275,7 @@ impl State {
             }),
             depth_stencil: None,
             multisample: wgpu::MultisampleState {
-                count: 1,
+                count: RENDER_SAMPLES,
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
@@ -274,13 +283,13 @@ impl State {
             cache: None,
         });
 
-        State {
-            main_texture_output_bind_group_layout,
-            main_texture_render_bind_group_layout,
-            main_texture,
-            main_texture_output_bind_group,
-            main_texture_render_bind_group,
+        let final_texture = final_texture(
+            device,
+            ray_tracing_texture.width(),
+            ray_tracing_texture.height(),
+        );
 
+        State {
             camera,
             camera_buffer,
 
@@ -290,9 +299,17 @@ impl State {
 
             ui_buffer,
 
+            ray_tracing_texture_output_bind_group_layout,
+            ray_tracing_texture_render_bind_group_layout,
+            ray_tracing_texture,
+            ray_tracing_texture_output_bind_group,
+            ray_tracing_texture_render_bind_group,
             ray_tracing_pipeline,
+
             ray_tracing_render_pipeline,
             ui_render_pipeline,
+
+            final_texture,
 
             mouse_locked: false,
         }
@@ -346,20 +363,24 @@ impl State {
 
     pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         (
-            self.main_texture,
-            self.main_texture_output_bind_group,
-            self.main_texture_render_bind_group,
-        ) = main_texture_and_bind_groups(
+            self.ray_tracing_texture,
+            self.ray_tracing_texture_output_bind_group,
+            self.ray_tracing_texture_render_bind_group,
+        ) = ray_tracing_texture_and_bind_groups(
             device,
             width,
             height,
-            &self.main_texture_output_bind_group_layout,
-            &self.main_texture_render_bind_group_layout,
+            &self.ray_tracing_texture_output_bind_group_layout,
+            &self.ray_tracing_texture_render_bind_group_layout,
         );
+
+        self.final_texture = final_texture(device, width, height);
     }
 
     pub fn render(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Texture) {
-        let wgpu::Extent3d { width, height, .. } = self.main_texture.size();
+        let wgpu::Extent3d { width, height, .. } = texture.size();
+        assert_eq!(texture.size(), self.ray_tracing_texture.size());
+        assert_eq!(texture.size(), self.final_texture.size());
 
         self.camera_buffer.write(
             device,
@@ -399,16 +420,19 @@ impl State {
                 });
 
             compute_pass.set_pipeline(&self.ray_tracing_pipeline);
-            compute_pass.set_bind_group(0, &self.main_texture_output_bind_group, &[]);
+            compute_pass.set_bind_group(0, &self.ray_tracing_texture_output_bind_group, &[]);
             compute_pass.set_bind_group(1, self.camera_buffer.bind_group(), &[]);
             compute_pass.set_bind_group(2, self.objects_buffer.bind_group(), &[]);
             compute_pass.dispatch_workgroups(width.div_ceil(16), height.div_ceil(16), 1);
         }
+
         {
             let mut render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Main Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &texture.create_view(&wgpu::TextureViewDescriptor::default()),
+                    view: &self
+                        .final_texture
+                        .create_view(&wgpu::TextureViewDescriptor::default()),
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -425,7 +449,7 @@ impl State {
             });
 
             render_pass.set_pipeline(&self.ray_tracing_render_pipeline);
-            render_pass.set_bind_group(0, &self.main_texture_render_bind_group, &[]);
+            render_pass.set_bind_group(0, &self.ray_tracing_texture_render_bind_group, &[]);
             render_pass.draw(0..4, 0..1);
 
             let info = GpuUiInfo {
@@ -433,15 +457,15 @@ impl State {
             };
             let lines = vec![
                 GpuLine {
-                    a: cgmath::vec2(0.05, 0.0),
-                    b: cgmath::vec2(-0.05, 0.0),
-                    width: 0.01,
+                    a: cgmath::vec2(0.02, 0.0),
+                    b: cgmath::vec2(-0.02, 0.0),
+                    width: 0.005,
                     color: cgmath::vec4(0.0, 0.0, 0.0, 1.0),
                 },
                 GpuLine {
-                    a: cgmath::vec2(0.0, 0.05),
-                    b: cgmath::vec2(0.0, -0.05),
-                    width: 0.01,
+                    a: cgmath::vec2(0.0, 0.02),
+                    b: cgmath::vec2(0.0, -0.02),
+                    width: 0.005,
                     color: cgmath::vec4(0.0, 0.0, 0.0, 1.0),
                 },
             ];
@@ -458,16 +482,22 @@ impl State {
                     .expect("there should be less than u32::MAX lines"),
             );
         }
+        command_encoder.copy_texture_to_texture(
+            self.final_texture.as_image_copy(),
+            texture.as_image_copy(),
+            texture.size(),
+        );
+
         queue.submit(std::iter::once(command_encoder.finish()));
     }
 }
 
-fn main_texture_bind_group_layouts(
+fn ray_tracing_texture_bind_group_layouts(
     device: &wgpu::Device,
 ) -> (wgpu::BindGroupLayout, wgpu::BindGroupLayout) {
     let output_bind_group_layout =
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Main Texture Output Bind Group Layout"),
+            label: Some("Ray Tracing Texture Output Bind Group Layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::COMPUTE,
@@ -481,7 +511,7 @@ fn main_texture_bind_group_layouts(
         });
     let render_bind_group_layout =
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Main Texture Render Bind Group Layout"),
+            label: Some("Ray Tracing Texture Render Bind Group Layout"),
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
@@ -504,7 +534,7 @@ fn main_texture_bind_group_layouts(
     (output_bind_group_layout, render_bind_group_layout)
 }
 
-fn main_texture_and_bind_groups(
+fn ray_tracing_texture_and_bind_groups(
     device: &wgpu::Device,
     width: u32,
     height: u32,
@@ -512,7 +542,7 @@ fn main_texture_and_bind_groups(
     render_layout: &wgpu::BindGroupLayout,
 ) -> (wgpu::Texture, wgpu::BindGroup, wgpu::BindGroup) {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("Main Texture"),
+        label: Some("Ray Tracing Texture"),
         size: wgpu::Extent3d {
             width,
             height,
@@ -527,6 +557,7 @@ fn main_texture_and_bind_groups(
     });
     let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
     let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("Ray Tracing Texture Sampler"),
         address_mode_u: wgpu::AddressMode::ClampToEdge,
         address_mode_v: wgpu::AddressMode::ClampToEdge,
         address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -536,7 +567,7 @@ fn main_texture_and_bind_groups(
         ..Default::default()
     });
     let output_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("Main Texture Output Bind Group"),
+        label: Some("Ray Tracing Texture Output Bind Group"),
         layout: output_layout,
         entries: &[wgpu::BindGroupEntry {
             binding: 0,
@@ -544,7 +575,7 @@ fn main_texture_and_bind_groups(
         }],
     });
     let render_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("Main Texture Render Bind Group"),
+        label: Some("Ray Tracing Texture Render Bind Group"),
         layout: render_layout,
         entries: &[
             wgpu::BindGroupEntry {
@@ -558,4 +589,21 @@ fn main_texture_and_bind_groups(
         ],
     });
     (texture, output_bind_group, render_bind_group)
+}
+
+fn final_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture {
+    device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("Final Texture"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: RENDER_SAMPLES,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Bgra8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    })
 }

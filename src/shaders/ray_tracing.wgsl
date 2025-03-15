@@ -93,22 +93,7 @@ fn ray_hit(ray: Ray) -> Hit {
     return hit;
 }
 
-@compute @workgroup_size(16, 16, 1)
-fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    let size = textureDimensions(output_texture);
-    let coords = global_id.xy;
-
-    if coords.x >= size.x || coords.y >= size.y {
-        return;
-    }
-
-    let aspect = f32(size.x) / f32(size.y);
-    let uv = ((vec2<f32>(coords) + 0.5) / vec2<f32>(size)) * 2.0 - 1.0;
-
-    var ray: Ray;
-    ray.origin = camera.position;
-    ray.direction = normalize(camera.right * (uv.x * aspect) + camera.up * uv.y + camera.forward);
-
+fn ray_color(ray: Ray) -> vec3<f32> {
     var color = mix(camera.down_sky_color, camera.up_sky_color, ray.direction.y * 0.5 + 0.5);
 
     let hit = ray_hit(ray);
@@ -128,5 +113,25 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         color = camera.sun_color;
     }
 
+    return color;
+}
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let size = textureDimensions(output_texture);
+    let coords = global_id.xy;
+
+    if coords.x >= size.x || coords.y >= size.y {
+        return;
+    }
+
+    let aspect = f32(size.x) / f32(size.y);
+    let uv = ((vec2<f32>(coords) + 0.5) / vec2<f32>(size)) * 2.0 - 1.0;
+
+    var ray: Ray;
+    ray.origin = camera.position;
+    ray.direction = normalize(camera.right * (uv.x * aspect) + camera.up * uv.y + camera.forward);
+
+    let color = ray_color(ray);
     textureStore(output_texture, coords, vec4<f32>(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0));
 }
