@@ -4,7 +4,9 @@ use crate::{
     gpu_types::{GpuCamera, GpuHyperSphere, GpuLengthArray, GpuLine, GpuMaterial, GpuUiInfo},
     hyper_sphere::HyperSphere,
     material::Material,
+    ray::{Ray, RayIntersect},
 };
+use cgmath::InnerSpace;
 use encase::ArrayLength;
 use winit::{
     event::{ElementState, MouseButton},
@@ -39,6 +41,7 @@ pub struct State {
 
     final_texture: wgpu::Texture,
 
+    selected_hyper_sphere: Option<usize>,
     mouse_locked: bool,
 }
 
@@ -311,6 +314,7 @@ impl State {
 
             final_texture,
 
+            selected_hyper_sphere: None,
             mouse_locked: false,
         }
     }
@@ -337,7 +341,47 @@ impl State {
         self.camera.key(key, state);
     }
 
-    pub fn mouse(&mut self, _button: MouseButton, _state: ElementState) {}
+    pub fn mouse(&mut self, button: MouseButton, state: ElementState, uv: cgmath::Vector2<f32>) {
+        if !self.mouse_locked {
+            if let (MouseButton::Left, ElementState::Pressed) = (button, state) {
+                let rotation = self.camera.get_rotation();
+                let forward = rotation.rotate(Camera::FORWARD);
+                let up = rotation.rotate(Camera::UP);
+                let right = rotation.rotate(Camera::RIGHT);
+
+                let ray = Ray {
+                    origin: self.camera.position,
+                    direction: (right * uv.x + up * uv.y + forward).normalize(),
+                };
+                let hit = self.hyper_spheres.iter().enumerate().fold(
+                    None,
+                    |current_hit, (index, hyper_sphere)| {
+                        let hit = hyper_sphere.intersect(ray);
+                        match (current_hit, hit) {
+                            (None, None) => None,
+                            (None, Some(hit)) => Some((index, hit)),
+                            (Some(_), None) => current_hit,
+                            (Some((current_index, current_hit)), Some(hit)) => {
+                                if current_hit.distance < hit.distance {
+                                    Some((current_index, current_hit))
+                                } else {
+                                    Some((index, hit))
+                                }
+                            }
+                        }
+                    },
+                );
+
+                println!("{hit:?}");
+
+                if let Some((index, _)) = hit {
+                    self.selected_hyper_sphere = Some(index);
+                } else {
+                    self.selected_hyper_sphere = None;
+                }
+            }
+        }
+    }
 
     pub fn focused(&mut self, focused: bool, window: &winit::window::Window) {
         if !focused {
