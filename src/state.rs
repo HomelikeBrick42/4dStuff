@@ -536,54 +536,44 @@ impl State {
                 let camera_transform = Transform::translation(self.camera.position)
                     * Transform::from_rotor(self.camera.get_rotation());
 
+                // applying the inverse camera transform to the position
                 let position = (!camera_transform).transform(hyper_sphere.position);
                 if position.x >= 0.0 {
                     let position = cgmath::vec2(position.z / position.x, position.y / position.x);
-                    {
-                        let x = (!camera_transform)
-                            .transform(hyper_sphere.position + cgmath::vec4(1.0, 0.0, 0.0, 0.0));
-                        if x.x >= 0.0 {
+
+                    let axis_lines = [
+                        (
+                            cgmath::vec4(1.0, 0.0, 0.0, 0.0),
+                            cgmath::vec4(1.0, 0.0, 0.0, 1.0),
+                        ),
+                        (
+                            cgmath::vec4(0.0, 1.0, 0.0, 0.0),
+                            cgmath::vec4(0.0, 1.0, 0.0, 1.0),
+                        ),
+                        (
+                            cgmath::vec4(0.0, 0.0, 1.0, 0.0),
+                            cgmath::vec4(0.0, 0.0, 1.0, 1.0),
+                        ),
+                        (
+                            cgmath::vec4(0.0, 0.0, 0.0, 1.0),
+                            cgmath::vec4(1.0, 0.0, 1.0, 1.0),
+                        ),
+                    ];
+
+                    for (axis_offset, axis_color) in axis_lines {
+                        // applying the inverse camera transform to the position
+                        let end_point =
+                            (!camera_transform).transform(hyper_sphere.position + axis_offset);
+
+                        if end_point.x >= 0.0 {
                             lines.push(GpuLine {
                                 a: position,
-                                b: cgmath::vec2(x.z / x.x, x.y / x.x),
+                                b: cgmath::vec2(
+                                    end_point.z / end_point.x,
+                                    end_point.y / end_point.x,
+                                ),
                                 width: 0.01,
-                                color: cgmath::vec4(1.0, 0.0, 0.0, 1.0),
-                            });
-                        }
-                    }
-                    {
-                        let y = (!camera_transform)
-                            .transform(hyper_sphere.position + cgmath::vec4(0.0, 1.0, 0.0, 0.0));
-                        if y.x >= 0.0 {
-                            lines.push(GpuLine {
-                                a: position,
-                                b: cgmath::vec2(y.z / y.x, y.y / y.x),
-                                width: 0.01,
-                                color: cgmath::vec4(0.0, 1.0, 0.0, 1.0),
-                            });
-                        }
-                    }
-                    {
-                        let z = (!camera_transform)
-                            .transform(hyper_sphere.position + cgmath::vec4(0.0, 0.0, 1.0, 0.0));
-                        if z.x >= 0.0 {
-                            lines.push(GpuLine {
-                                a: position,
-                                b: cgmath::vec2(z.z / z.x, z.y / z.x),
-                                width: 0.01,
-                                color: cgmath::vec4(0.0, 0.0, 1.0, 1.0),
-                            });
-                        }
-                    }
-                    {
-                        let w = (!camera_transform)
-                            .transform(hyper_sphere.position + cgmath::vec4(0.0, 0.0, 0.0, 1.0));
-                        if w.x >= 0.0 {
-                            lines.push(GpuLine {
-                                a: position,
-                                b: cgmath::vec2(w.z / w.x, w.y / w.x),
-                                width: 0.01,
-                                color: cgmath::vec4(1.0, 0.0, 1.0, 1.0),
+                                color: axis_color,
                             });
                         }
                     }
