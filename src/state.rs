@@ -4,6 +4,7 @@ use crate::{
     gpu_types::{GpuCamera, GpuHyperSphere, GpuLengthArray, GpuLine, GpuMaterial, GpuUiInfo},
     hyper_sphere::HyperSphere,
     material::Material,
+    math::Transform,
     ray::{Ray, RayIntersect},
 };
 use cgmath::InnerSpace;
@@ -499,7 +500,7 @@ impl State {
             let info = GpuUiInfo {
                 aspect: width as f32 / height as f32,
             };
-            let lines = vec![
+            let mut lines = vec![
                 GpuLine {
                     a: cgmath::vec2(0.02, 0.0),
                     b: cgmath::vec2(-0.02, 0.0),
@@ -513,6 +514,66 @@ impl State {
                     color: cgmath::vec4(0.0, 0.0, 0.0, 1.0),
                 },
             ];
+
+            if let Some(index) = self.selected_hyper_sphere {
+                let hyper_sphere = &self.hyper_spheres[index];
+                let camera_transform = Transform::translation(self.camera.position)
+                    * Transform::from_rotor(self.camera.get_rotation());
+
+                let position = (!camera_transform).transform(hyper_sphere.position);
+                if position.x >= 0.0 {
+                    let position = cgmath::vec2(position.z / position.x, position.y / position.x);
+                    {
+                        let x = (!camera_transform)
+                            .transform(hyper_sphere.position + cgmath::vec4(1.0, 0.0, 0.0, 0.0));
+                        if x.x >= 0.0 {
+                            lines.push(GpuLine {
+                                a: position,
+                                b: cgmath::vec2(x.z / x.x, x.y / x.x),
+                                width: 0.01,
+                                color: cgmath::vec4(1.0, 0.0, 0.0, 1.0),
+                            });
+                        }
+                    }
+                    {
+                        let y = (!camera_transform)
+                            .transform(hyper_sphere.position + cgmath::vec4(0.0, 1.0, 0.0, 0.0));
+                        if y.x >= 0.0 {
+                            lines.push(GpuLine {
+                                a: position,
+                                b: cgmath::vec2(y.z / y.x, y.y / y.x),
+                                width: 0.01,
+                                color: cgmath::vec4(0.0, 1.0, 0.0, 1.0),
+                            });
+                        }
+                    }
+                    {
+                        let z = (!camera_transform)
+                            .transform(hyper_sphere.position + cgmath::vec4(0.0, 0.0, 1.0, 0.0));
+                        if z.x >= 0.0 {
+                            lines.push(GpuLine {
+                                a: position,
+                                b: cgmath::vec2(z.z / z.x, z.y / z.x),
+                                width: 0.01,
+                                color: cgmath::vec4(0.0, 0.0, 1.0, 1.0),
+                            });
+                        }
+                    }
+                    {
+                        let w = (!camera_transform)
+                            .transform(hyper_sphere.position + cgmath::vec4(0.0, 0.0, 0.0, 1.0));
+                        if w.x >= 0.0 {
+                            lines.push(GpuLine {
+                                a: position,
+                                b: cgmath::vec2(w.z / w.x, w.y / w.x),
+                                width: 0.01,
+                                color: cgmath::vec4(1.0, 0.0, 1.0, 1.0),
+                            });
+                        }
+                    }
+                }
+            }
+
             self.ui_buffer
                 .write(device, queue, (Some(&info), Some(&lines)));
 
