@@ -7,6 +7,7 @@ use crate::{
     math::Transform,
     ray::{Ray, RayIntersect},
 };
+use arrayvec::ArrayVec;
 use cgmath::InnerSpace;
 use encase::ArrayLength;
 use winit::{
@@ -438,6 +439,60 @@ impl State {
         self.final_texture = final_texture(device, width, height);
     }
 
+    fn get_axis_lines(camera: &Camera, hyper_sphere: &HyperSphere) -> ArrayVec<GpuLine, 4> {
+        let mut lines = ArrayVec::new();
+
+        let camera_transform =
+            Transform::translation(camera.position) * Transform::from_rotor(camera.get_rotation());
+
+        // applying the inverse camera transform to the position
+        let position = (!camera_transform).transform(hyper_sphere.position);
+        if position.x >= 0.0 {
+            let position = cgmath::vec2(position.z / position.x, position.y / position.x);
+
+            let axis_lines = [
+                (
+                    cgmath::vec4(1.0, 0.0, 0.0, 0.0),
+                    cgmath::vec4(1.0, 0.0, 0.0, 1.0),
+                ),
+                (
+                    cgmath::vec4(0.0, 1.0, 0.0, 0.0),
+                    cgmath::vec4(0.0, 1.0, 0.0, 1.0),
+                ),
+                (
+                    cgmath::vec4(0.0, 0.0, 1.0, 0.0),
+                    cgmath::vec4(0.0, 0.0, 1.0, 1.0),
+                ),
+                (
+                    cgmath::vec4(0.0, 0.0, 0.0, 1.0),
+                    cgmath::vec4(1.0, 0.0, 1.0, 1.0),
+                ),
+            ];
+
+            let mut axis_lines = axis_lines.map(|(axis_offset, axis_color)| {
+                // applying the inverse camera transform to the position
+                (
+                    (!camera_transform).transform(hyper_sphere.position + axis_offset),
+                    axis_color,
+                )
+            });
+            axis_lines.sort_by(|(a, _), (b, _)| a.x.total_cmp(&b.x).reverse());
+
+            for (end_point, axis_color) in axis_lines {
+                if end_point.x >= 0.0 {
+                    lines.push(GpuLine {
+                        a: position,
+                        b: cgmath::vec2(end_point.z / end_point.x, end_point.y / end_point.x),
+                        width: 0.01,
+                        color: axis_color,
+                    });
+                }
+            }
+        }
+
+        lines
+    }
+
     pub fn render(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Texture) {
         let wgpu::Extent3d { width, height, .. } = texture.size();
         assert_eq!(texture.size(), self.ray_tracing_texture.size());
@@ -532,52 +587,10 @@ impl State {
             ];
 
             if let Some(index) = self.selected_hyper_sphere {
-                let hyper_sphere = &self.hyper_spheres[index];
-                let camera_transform = Transform::translation(self.camera.position)
-                    * Transform::from_rotor(self.camera.get_rotation());
-
-                // applying the inverse camera transform to the position
-                let position = (!camera_transform).transform(hyper_sphere.position);
-                if position.x >= 0.0 {
-                    let position = cgmath::vec2(position.z / position.x, position.y / position.x);
-
-                    let axis_lines = [
-                        (
-                            cgmath::vec4(1.0, 0.0, 0.0, 0.0),
-                            cgmath::vec4(1.0, 0.0, 0.0, 1.0),
-                        ),
-                        (
-                            cgmath::vec4(0.0, 1.0, 0.0, 0.0),
-                            cgmath::vec4(0.0, 1.0, 0.0, 1.0),
-                        ),
-                        (
-                            cgmath::vec4(0.0, 0.0, 1.0, 0.0),
-                            cgmath::vec4(0.0, 0.0, 1.0, 1.0),
-                        ),
-                        (
-                            cgmath::vec4(0.0, 0.0, 0.0, 1.0),
-                            cgmath::vec4(1.0, 0.0, 1.0, 1.0),
-                        ),
-                    ];
-
-                    for (axis_offset, axis_color) in axis_lines {
-                        // applying the inverse camera transform to the position
-                        let end_point =
-                            (!camera_transform).transform(hyper_sphere.position + axis_offset);
-
-                        if end_point.x >= 0.0 {
-                            lines.push(GpuLine {
-                                a: position,
-                                b: cgmath::vec2(
-                                    end_point.z / end_point.x,
-                                    end_point.y / end_point.x,
-                                ),
-                                width: 0.01,
-                                color: axis_color,
-                            });
-                        }
-                    }
-                }
+                lines.extend(Self::get_axis_lines(
+                    &self.camera,
+                    &self.hyper_spheres[index],
+                ));
             }
 
             self.ui_buffer
