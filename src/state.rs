@@ -72,6 +72,12 @@ impl State {
             Material {
                 color: cgmath::vec3(0.8, 0.2, 0.1),
             },
+            Material {
+                color: cgmath::vec3(0.2, 0.8, 0.3),
+            },
+            Material {
+                color: cgmath::vec3(0.1, 0.2, 0.8),
+            },
         ];
         let hyper_spheres = vec![
             HyperSphere {
@@ -83,6 +89,16 @@ impl State {
                 position: cgmath::vec4(3.0, 0.0, 0.0, 0.0),
                 radius: 1.0,
                 material: 1,
+            },
+            HyperSphere {
+                position: cgmath::vec4(3.0, 0.0, 2.0, 0.0),
+                radius: 1.0,
+                material: 2,
+            },
+            HyperSphere {
+                position: cgmath::vec4(3.0, 0.0, -2.0, 2.0),
+                radius: 1.0,
+                material: 3,
             },
         ];
         let objects_buffer = BufferGroup::new(
