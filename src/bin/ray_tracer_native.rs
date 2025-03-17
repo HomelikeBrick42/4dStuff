@@ -3,6 +3,7 @@ use std::sync::Arc;
 use ray_tracer::state::State;
 use winit::{
     application::ApplicationHandler,
+    dpi::{PhysicalPosition, PhysicalSize},
     event::{DeviceEvent, KeyEvent, MouseScrollDelta, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::PhysicalKey,
@@ -23,6 +24,7 @@ struct App {
     window_state: Option<WindowState>,
     last_frame_time: Option<std::time::Instant>,
     delta_time: std::time::Duration,
+    cursor_position: PhysicalPosition<f64>,
 }
 
 impl ApplicationHandler for App {
@@ -42,7 +44,7 @@ impl ApplicationHandler for App {
             .create_surface(window.clone())
             .expect("surface should be created successfully");
         let surface_config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            usage: wgpu::TextureUsages::COPY_DST,
             format: wgpu::TextureFormat::Bgra8Unorm,
             width: size.width.max(1),
             height: size.height.max(1),
@@ -192,11 +194,35 @@ impl ApplicationHandler for App {
                 phase: _,
             } => state.mouse_scrolled(cgmath::vec2(delta.x as f32, delta.y as f32)),
 
+            WindowEvent::CursorMoved {
+                device_id: _,
+                position,
+            } => {
+                self.cursor_position = position;
+                let PhysicalSize { width, height } = window.inner_size();
+                state.cursor_moved(cgmath::Vector2 {
+                    x: (((self.cursor_position.x as f32 + 0.5) / width as f32) * 2.0 - 1.0)
+                        * (width as f32 / height as f32),
+                    y: ((self.cursor_position.y as f32 + 0.5) / height as f32) * -2.0 + 1.0,
+                });
+            }
+
             WindowEvent::MouseInput {
                 device_id: _,
                 state: button_state,
                 button,
-            } => state.mouse(button, button_state),
+            } => {
+                let PhysicalSize { width, height } = window.inner_size();
+                state.mouse(
+                    button,
+                    button_state,
+                    cgmath::Vector2 {
+                        x: (((self.cursor_position.x as f32 + 0.5) / width as f32) * 2.0 - 1.0)
+                            * (width as f32 / height as f32),
+                        y: ((self.cursor_position.y as f32 + 0.5) / height as f32) * -2.0 + 1.0,
+                    },
+                );
+            }
 
             _ => {}
         }
@@ -239,6 +265,7 @@ fn main() {
             window_state: None,
             last_frame_time: None,
             delta_time: std::time::Duration::ZERO,
+            cursor_position: PhysicalPosition { x: 0.0, y: 0.0 },
         })
         .expect("the event loop should be started");
 }

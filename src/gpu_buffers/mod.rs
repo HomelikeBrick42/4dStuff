@@ -9,7 +9,7 @@ mod private {
 }
 use private::BufferTupleSealed;
 
-pub trait Buffer: 'static {
+pub trait Buffer {
     type Data: ?Sized;
     fn min_size() -> std::num::NonZero<wgpu::BufferAddress>;
     fn buffer(&self) -> &wgpu::Buffer;
@@ -29,12 +29,14 @@ pub trait BufferTuple: BufferTupleSealed {
         info: &Self::CreationInfo,
     ) -> Self::Array<wgpu::BindGroupLayoutEntry>;
     fn bind_group_entries(&self) -> Self::Array<wgpu::BindGroupEntry<'_>>;
-    fn write(
+    fn write<'a>(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        write_input: Self::WriteInput<'_>,
-    ) -> bool;
+        write_input: Self::WriteInput<'a>,
+    ) -> bool
+    where
+        Self: 'a;
 }
 
 pub struct BufferCreationInfo<T> {
@@ -158,12 +160,15 @@ macro_rules! tuple_impls {
                 },)*]
             }
 
-            fn write(
+            fn write<'a>(
                 &mut self,
                 device: &wgpu::Device,
                 queue: &wgpu::Queue,
-                write_input: Self::WriteInput<'_>,
-            ) -> bool {
+                write_input: Self::WriteInput<'a>,
+            ) -> bool
+            where
+                Self: 'a,
+            {
                 let ($($names,)*) = self;
                 let ($($second_names,)*) = write_input;
                 $($second_names.is_some_and(|input| {
