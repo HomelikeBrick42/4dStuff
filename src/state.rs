@@ -7,7 +7,6 @@ use crate::{
     math::Transform,
     ray::{Ray, RayIntersect},
 };
-use arrayvec::ArrayVec;
 use cgmath::InnerSpace;
 use encase::ArrayLength;
 use winit::{
@@ -44,7 +43,14 @@ pub struct State {
     final_texture: wgpu::Texture,
 
     selected_hyper_sphere: Option<usize>,
+    axis_line_interaction: Option<AxisLineInteraction>,
     mouse_locked: bool,
+}
+
+struct AxisLineInteraction {
+    axis_index: usize,
+    start_pos: f32,
+    dragging: bool,
 }
 
 impl State {
@@ -333,6 +339,7 @@ impl State {
             final_texture,
 
             selected_hyper_sphere: None,
+            axis_line_interaction: None,
             mouse_locked: false,
         }
     }
@@ -361,42 +368,54 @@ impl State {
 
     pub fn mouse(&mut self, button: MouseButton, state: ElementState, uv: cgmath::Vector2<f32>) {
         if !self.mouse_locked {
-            if let (MouseButton::Left, ElementState::Pressed) = (button, state) {
-                let rotation = self.camera.get_rotation();
-                let forward = rotation.rotate(Camera::FORWARD);
-                let up = rotation.rotate(Camera::UP);
-                let right = rotation.rotate(Camera::RIGHT);
+            match (button, state) {
+                (MouseButton::Left, ElementState::Released) => self.axis_line_interaction = None,
 
-                let ray = Ray {
-                    origin: self.camera.position,
-                    direction: (right * uv.x + up * uv.y + forward).normalize(),
-                };
-                let hit = self.hyper_spheres.iter().enumerate().fold(
-                    None,
-                    |current_hit, (index, hyper_sphere)| {
-                        let hit = hyper_sphere.intersect(ray);
-                        match (current_hit, hit) {
-                            (None, None) => None,
-                            (None, Some(hit)) => Some((index, hit)),
-                            (Some(_), None) => current_hit,
-                            (Some((current_index, current_hit)), Some(hit)) => {
-                                if current_hit.distance < hit.distance {
-                                    Some((current_index, current_hit))
-                                } else {
-                                    Some((index, hit))
+                (MouseButton::Left, ElementState::Pressed) => {
+                    if let Some(interaction) = &mut self.axis_line_interaction {
+                        interaction.dragging = true;
+                    }
+
+                    if self.axis_line_interaction.is_none() {
+                        let rotation = self.camera.get_rotation();
+                        let forward = rotation.rotate(Camera::FORWARD);
+                        let up = rotation.rotate(Camera::UP);
+                        let right = rotation.rotate(Camera::RIGHT);
+
+                        let ray = Ray {
+                            origin: self.camera.position,
+                            direction: (right * uv.x + up * uv.y + forward).normalize(),
+                        };
+                        let hit = self.hyper_spheres.iter().enumerate().fold(
+                            None,
+                            |current_hit, (index, hyper_sphere)| {
+                                let hit = hyper_sphere.intersect(ray);
+                                match (current_hit, hit) {
+                                    (None, None) => None,
+                                    (None, Some(hit)) => Some((index, hit)),
+                                    (Some(_), None) => current_hit,
+                                    (Some((current_index, current_hit)), Some(hit)) => {
+                                        if current_hit.distance < hit.distance {
+                                            Some((current_index, current_hit))
+                                        } else {
+                                            Some((index, hit))
+                                        }
+                                    }
                                 }
-                            }
+                            },
+                        );
+
+                        println!("{hit:?}");
+
+                        if let Some((index, _)) = hit {
+                            self.selected_hyper_sphere = Some(index);
+                        } else {
+                            self.selected_hyper_sphere = None;
                         }
-                    },
-                );
-
-                println!("{hit:?}");
-
-                if let Some((index, _)) = hit {
-                    self.selected_hyper_sphere = Some(index);
-                } else {
-                    self.selected_hyper_sphere = None;
+                    }
                 }
+
+                _ => {}
             }
         }
     }
@@ -406,6 +425,7 @@ impl State {
             _ = window.set_cursor_grab(winit::window::CursorGrabMode::None);
             window.set_cursor_visible(true);
             self.mouse_locked = false;
+            self.axis_line_interaction = None;
 
             self.camera.reset_keys();
         }
@@ -420,6 +440,72 @@ impl State {
     pub fn mouse_moved(&mut self, delta: cgmath::Vector2<f32>) {
         if self.mouse_locked {
             self.camera.mouse_moved(delta);
+        }
+    }
+
+    pub fn cursor_moved(&mut self, uv: cgmath::Vector2<f32>) {
+        if !self.mouse_locked {
+            if let Some(selected_hyper_sphere) = self.selected_hyper_sphere {
+                'axis_lines: {
+                    let axis_lines = Self::get_axis_lines(
+                        &self.camera,
+                        &self.hyper_spheres[selected_hyper_sphere],
+                    );
+
+                    let axis_lines = axis_lines.map(|axis_line| {
+                        axis_line.and_then(|(axis_line, _)| {
+                            let a_to_b = axis_line.b - axis_line.a;
+                            let line_length = a_to_b.magnitude();
+                            if line_length < 0.01 {
+                                return None;
+                            }
+                            let a_to_b = a_to_b / line_length;
+                            let normal = cgmath::vec2(a_to_b.y, -a_to_b.x);
+
+                            let pos = (uv - axis_line.a).dot(a_to_b) / line_length;
+                            let dist = (uv - axis_line.a).dot(normal).abs();
+
+                            if dist > axis_line.width * 4.0 {
+                                return None;
+                            }
+
+                            Some((pos, dist))
+                        })
+                    });
+
+                    if let Some(interaction) = &mut self.axis_line_interaction {
+                        if interaction.dragging {
+                            if let Some((pos, _)) = axis_lines[interaction.axis_index] {
+                                let hyper_sphere = &mut self.hyper_spheres[self.selected_hyper_sphere.expect("if an axis is being dragged a hyper sphere must be selected")];
+                                let axis = Self::axis_from_index(interaction.axis_index);
+                                let pos_delta = pos - interaction.start_pos;
+                                hyper_sphere.position += axis * pos_delta;
+                                break 'axis_lines;
+                            }
+                        }
+                    }
+
+                    let closest = axis_lines
+                        .into_iter()
+                        .enumerate()
+                        .filter_map(|(index, distances)| {
+                            distances.and_then(|(pos, dist)| {
+                                (0.0..=1.0).contains(&pos).then_some((index, pos, dist))
+                            })
+                        })
+                        .min_by(|(_, _, a_dist), (_, _, b_dist)| a_dist.total_cmp(b_dist));
+
+                    if let Some((index, pos, _)) = closest {
+                        self.axis_line_interaction = Some(AxisLineInteraction {
+                            axis_index: index,
+                            start_pos: pos,
+                            dragging: false,
+                        });
+                    } else {
+                        self.axis_line_interaction = None;
+                    }
+                }
+            }
         }
     }
 
@@ -439,9 +525,17 @@ impl State {
         self.final_texture = final_texture(device, width, height);
     }
 
-    fn get_axis_lines(camera: &Camera, hyper_sphere: &HyperSphere) -> ArrayVec<GpuLine, 4> {
-        let mut lines = ArrayVec::new();
+    const fn axis_from_index(index: usize) -> cgmath::Vector4<f32> {
+        match index {
+            0 => cgmath::vec4(1.0, 0.0, 0.0, 0.0),
+            1 => cgmath::vec4(0.0, 1.0, 0.0, 0.0),
+            2 => cgmath::vec4(0.0, 0.0, 1.0, 0.0),
+            3 => cgmath::vec4(0.0, 0.0, 0.0, 1.0),
+            _ => panic!("invalid index"),
+        }
+    }
 
+    fn get_axis_lines(camera: &Camera, hyper_sphere: &HyperSphere) -> [Option<(GpuLine, f32)>; 4] {
         let camera_transform =
             Transform::translation(camera.position) * Transform::from_rotor(camera.get_rotation());
 
@@ -451,46 +545,31 @@ impl State {
             let position = cgmath::vec2(position.z / position.x, position.y / position.x);
 
             let axis_lines = [
-                (
-                    cgmath::vec4(1.0, 0.0, 0.0, 0.0),
-                    cgmath::vec4(1.0, 0.0, 0.0, 1.0),
-                ),
-                (
-                    cgmath::vec4(0.0, 1.0, 0.0, 0.0),
-                    cgmath::vec4(0.0, 1.0, 0.0, 1.0),
-                ),
-                (
-                    cgmath::vec4(0.0, 0.0, 1.0, 0.0),
-                    cgmath::vec4(0.0, 0.0, 1.0, 1.0),
-                ),
-                (
-                    cgmath::vec4(0.0, 0.0, 0.0, 1.0),
-                    cgmath::vec4(1.0, 0.0, 1.0, 1.0),
-                ),
+                (Self::axis_from_index(0), cgmath::vec4(1.0, 0.2, 0.2, 1.0)),
+                (Self::axis_from_index(1), cgmath::vec4(0.2, 1.0, 0.2, 1.0)),
+                (Self::axis_from_index(2), cgmath::vec4(0.2, 0.2, 1.0, 1.0)),
+                (Self::axis_from_index(3), cgmath::vec4(1.0, 0.2, 1.0, 1.0)),
             ];
 
-            let mut axis_lines = axis_lines.map(|(axis_offset, axis_color)| {
-                // applying the inverse camera transform to the position
-                (
-                    (!camera_transform).transform(hyper_sphere.position + axis_offset),
-                    axis_color,
-                )
-            });
-            axis_lines.sort_by(|(a, _), (b, _)| a.x.total_cmp(&b.x).reverse());
-
-            for (end_point, axis_color) in axis_lines {
+            axis_lines.map(|(axis_offset, axis_color)| {
+                let end_point = (!camera_transform).transform(hyper_sphere.position + axis_offset);
                 if end_point.x >= 0.0 {
-                    lines.push(GpuLine {
-                        a: position,
-                        b: cgmath::vec2(end_point.z / end_point.x, end_point.y / end_point.x),
-                        width: 0.01,
-                        color: axis_color,
-                    });
+                    Some((
+                        GpuLine {
+                            a: position,
+                            b: cgmath::vec2(end_point.z / end_point.x, end_point.y / end_point.x),
+                            width: 0.01,
+                            color: axis_color,
+                        },
+                        end_point.x,
+                    ))
+                } else {
+                    None
                 }
-            }
+            })
+        } else {
+            [const { None }; 4]
         }
-
-        lines
     }
 
     pub fn render(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Texture) {
@@ -587,10 +666,27 @@ impl State {
             ];
 
             if let Some(index) = self.selected_hyper_sphere {
-                lines.extend(Self::get_axis_lines(
-                    &self.camera,
-                    &self.hyper_spheres[index],
-                ));
+                let mut axis_lines = Self::get_axis_lines(&self.camera, &self.hyper_spheres[index]);
+                for (index, line) in axis_lines.iter_mut().enumerate() {
+                    if let Some((line, _)) = line {
+                        if self
+                            .axis_line_interaction
+                            .as_ref()
+                            .is_some_and(|interaction| interaction.axis_index == index)
+                        {
+                            line.color *= 2.0;
+                        }
+                    }
+                }
+                axis_lines.sort_by(|a, b| match (a, b) {
+                    (None, None) => std::cmp::Ordering::Equal,
+                    (None, Some(_)) => std::cmp::Ordering::Greater,
+                    (Some(_), None) => std::cmp::Ordering::Less,
+                    (Some((_, distance_a)), Some((_, distance_b))) => {
+                        distance_a.total_cmp(distance_b).reverse()
+                    }
+                });
+                lines.extend(axis_lines.into_iter().flatten().map(|(line, _)| line));
             }
 
             self.ui_buffer

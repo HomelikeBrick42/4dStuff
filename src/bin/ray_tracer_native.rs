@@ -197,7 +197,15 @@ impl ApplicationHandler for App {
             WindowEvent::CursorMoved {
                 device_id: _,
                 position,
-            } => self.cursor_position = position,
+            } => {
+                self.cursor_position = position;
+                let PhysicalSize { width, height } = window.inner_size();
+                state.cursor_moved(cgmath::Vector2 {
+                    x: (((self.cursor_position.x as f32 + 0.5) / width as f32) * 2.0 - 1.0)
+                        * (width as f32 / height as f32),
+                    y: ((self.cursor_position.y as f32 + 0.5) / height as f32) * -2.0 + 1.0,
+                });
+            }
 
             WindowEvent::MouseInput {
                 device_id: _,

@@ -1,14 +1,14 @@
 use crate::{camera::Camera, hyper_sphere::HyperSphere, material::Material};
 use encase::{ArrayLength, ShaderSize, ShaderType};
 
-#[derive(ShaderType)]
+#[derive(Debug, ShaderType)]
 pub struct GpuLengthArray<T: ShaderSize> {
     pub length: ArrayLength,
     #[size(runtime)]
     pub data: Vec<T>,
 }
 
-#[derive(ShaderType)]
+#[derive(Debug, ShaderType)]
 pub struct GpuCamera {
     pub position: cgmath::Vector4<f32>,
     pub forward: cgmath::Vector4<f32>,
@@ -60,7 +60,7 @@ impl GpuCamera {
     }
 }
 
-#[derive(ShaderType)]
+#[derive(Debug, ShaderType)]
 pub struct GpuHyperSphere {
     pub position: cgmath::Vector4<f32>,
     pub radius: f32,
@@ -82,7 +82,7 @@ impl GpuHyperSphere {
     }
 }
 
-#[derive(ShaderType)]
+#[derive(Debug, ShaderType)]
 pub struct GpuMaterial {
     pub color: cgmath::Vector3<f32>,
 }
@@ -94,12 +94,12 @@ impl GpuMaterial {
     }
 }
 
-#[derive(ShaderType)]
+#[derive(Debug, ShaderType)]
 pub struct GpuUiInfo {
     pub aspect: f32,
 }
 
-#[derive(ShaderType)]
+#[derive(Debug, ShaderType)]
 pub struct GpuLine {
     pub a: cgmath::Vector2<f32>,
     pub b: cgmath::Vector2<f32>,
