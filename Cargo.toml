@@ -9,6 +9,7 @@ elided_lifetimes_in_paths = "deny"
 [dependencies]
 cgmath = { version = "0.18.0" }
 encase = { version = "0.10.0", features = ["cgmath"] }
+enum_dispatch = "0.3.13"
 pollster = "0.4.0"
 wgpu = "24.0.1"
 winit = "0.30.9"

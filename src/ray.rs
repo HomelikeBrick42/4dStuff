@@ -1,5 +1,6 @@
-use crate::hyper_sphere::HyperSphere;
+use crate::objects::{HyperPlane, HyperSphere, Object};
 use cgmath::InnerSpace;
+use enum_dispatch::enum_dispatch;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Ray {
@@ -15,6 +16,7 @@ pub struct Hit {
     pub material: u32,
 }
 
+#[enum_dispatch]
 pub trait RayIntersect {
     fn intersect(&self, ray: Ray) -> Option<Hit>;
 }
@@ -39,6 +41,26 @@ impl RayIntersect for HyperSphere {
 
         let position = ray.origin + ray.direction * distance;
         let normal = (position - self.position) / self.radius;
+        let material = self.material;
+        Some(Hit {
+            distance,
+            position,
+            normal,
+            material,
+        })
+    }
+}
+
+impl RayIntersect for HyperPlane {
+    fn intersect(&self, ray: Ray) -> Option<Hit> {
+        let denom = self.normal.dot(ray.direction);
+        let distance = (self.position - ray.origin).dot(self.normal) / denom;
+        if distance <= 0.0 {
+            return None;
+        }
+
+        let position = ray.origin + ray.direction * distance;
+        let normal = self.normal * -denom.signum();
         let material = self.material;
         Some(Hit {
             distance,
