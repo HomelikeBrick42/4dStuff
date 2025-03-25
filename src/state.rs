@@ -1,10 +1,12 @@
 use crate::{
     camera::Camera,
     gpu_buffers::{BufferCreationInfo, BufferGroup, DynamicBuffer, FixedSizeBuffer},
-    gpu_types::{GpuCamera, GpuHyperSphere, GpuLengthArray, GpuLine, GpuMaterial, GpuUiInfo},
-    hyper_sphere::HyperSphere,
+    gpu_types::{
+        GpuCamera, GpuHyperPlane, GpuHyperSphere, GpuLengthArray, GpuLine, GpuMaterial, GpuUiInfo,
+    },
     material::Material,
     math::Transform,
+    objects::{HyperPlane, HyperSphere, Object},
     ray::{Ray, RayIntersect},
 };
 use cgmath::InnerSpace;
@@ -21,11 +23,12 @@ pub struct State {
     camera_buffer: BufferGroup<(FixedSizeBuffer<GpuCamera>,)>,
 
     materials: Vec<Material>,
-    hyper_spheres: Vec<HyperSphere>,
+    objects: Vec<Object>,
     #[expect(clippy::type_complexity)]
     objects_buffer: BufferGroup<(
         DynamicBuffer<Vec<GpuMaterial>>,
         DynamicBuffer<GpuLengthArray<GpuHyperSphere>>,
+        DynamicBuffer<GpuLengthArray<GpuHyperPlane>>,
     )>,
 
     ui_buffer: BufferGroup<(FixedSizeBuffer<GpuUiInfo>, DynamicBuffer<Vec<GpuLine>>)>,
@@ -86,65 +89,79 @@ impl State {
                 color: cgmath::vec3(0.1, 0.2, 0.8),
             },
         ];
-        let hyper_spheres = vec![
-            HyperSphere {
-                position: cgmath::vec4(3.0, -1001.0, 0.0, 0.0),
-                radius: 1000.0,
+        let objects = vec![
+            Object::HyperPlane(HyperPlane {
+                position: cgmath::vec4(0.0, -1.0, 0.0, 0.0),
+                normal: cgmath::vec4(0.0, 1.0, 0.0, 0.0),
                 material: 0,
-            },
-            HyperSphere {
+            }),
+            Object::HyperSphere(HyperSphere {
                 position: cgmath::vec4(3.0, 0.0, 0.0, 0.0),
                 radius: 1.0,
                 material: 1,
-            },
-            HyperSphere {
+            }),
+            Object::HyperSphere(HyperSphere {
                 position: cgmath::vec4(3.0, 0.0, 2.0, 0.0),
                 radius: 1.0,
                 material: 2,
-            },
-            HyperSphere {
+            }),
+            Object::HyperSphere(HyperSphere {
                 position: cgmath::vec4(3.0, 0.0, -2.0, 2.0),
                 radius: 1.0,
                 material: 3,
-            },
+            }),
         ];
-        let objects_buffer = BufferGroup::new(
-            device,
-            "Objects",
-            (
-                BufferCreationInfo {
-                    buffer: DynamicBuffer::new(
-                        device,
-                        queue,
-                        "Materials",
-                        wgpu::BufferUsages::STORAGE,
-                        &materials
-                            .iter()
-                            .map(GpuMaterial::from_material)
-                            .collect::<Vec<_>>(),
-                    ),
-                    binding_type: wgpu::BufferBindingType::Storage { read_only: true },
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                },
-                BufferCreationInfo {
-                    buffer: DynamicBuffer::new(
-                        device,
-                        queue,
-                        "Hyper Spheres",
-                        wgpu::BufferUsages::STORAGE,
-                        &GpuLengthArray {
-                            length: ArrayLength,
-                            data: hyper_spheres
+        let objects_buffer = {
+            let (hyper_spheres, hyper_planes) = Self::objects_to_gpu_objects(&objects);
+            BufferGroup::new(
+                device,
+                "Objects",
+                (
+                    BufferCreationInfo {
+                        buffer: DynamicBuffer::new(
+                            device,
+                            queue,
+                            "Materials",
+                            wgpu::BufferUsages::STORAGE,
+                            &materials
                                 .iter()
-                                .map(GpuHyperSphere::from_hyper_sphere)
+                                .map(GpuMaterial::from_material)
                                 .collect::<Vec<_>>(),
-                        },
-                    ),
-                    binding_type: wgpu::BufferBindingType::Storage { read_only: true },
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                },
-            ),
-        );
+                        ),
+                        binding_type: wgpu::BufferBindingType::Storage { read_only: true },
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                    },
+                    BufferCreationInfo {
+                        buffer: DynamicBuffer::new(
+                            device,
+                            queue,
+                            "Hyper Spheres",
+                            wgpu::BufferUsages::STORAGE,
+                            &GpuLengthArray {
+                                length: ArrayLength,
+                                data: hyper_spheres,
+                            },
+                        ),
+                        binding_type: wgpu::BufferBindingType::Storage { read_only: true },
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                    },
+                    BufferCreationInfo {
+                        buffer: DynamicBuffer::new(
+                            device,
+                            queue,
+                            "Hyper Planes",
+                            wgpu::BufferUsages::STORAGE,
+                            &GpuLengthArray {
+                                length: ArrayLength,
+                                data: hyper_planes,
+                            },
+                        ),
+                        binding_type: wgpu::BufferBindingType::Storage { read_only: true },
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                    },
+                ),
+            )
+        };
 
         let ui_buffer = BufferGroup::new(
             device,
@@ -321,7 +338,7 @@ impl State {
             camera_buffer,
 
             materials,
-            hyper_spheres,
+            objects,
             objects_buffer,
 
             ui_buffer,
@@ -386,7 +403,7 @@ impl State {
                             origin: self.camera.position,
                             direction: (right * uv.x + up * uv.y + forward).normalize(),
                         };
-                        let hit = self.hyper_spheres.iter().enumerate().fold(
+                        let hit = self.objects.iter().enumerate().fold(
                             None,
                             |current_hit, (index, hyper_sphere)| {
                                 let hit = hyper_sphere.intersect(ray);
@@ -447,10 +464,8 @@ impl State {
         if !self.mouse_locked {
             if let Some(selected_hyper_sphere) = self.selected_hyper_sphere {
                 'axis_lines: {
-                    let axis_lines = Self::get_axis_lines(
-                        &self.camera,
-                        &self.hyper_spheres[selected_hyper_sphere],
-                    );
+                    let axis_lines =
+                        Self::get_axis_lines(&self.camera, &self.objects[selected_hyper_sphere]);
 
                     let axis_lines = axis_lines.map(|axis_line| {
                         axis_line.and_then(|(axis_line, _)| {
@@ -476,10 +491,12 @@ impl State {
                     if let Some(interaction) = &mut self.axis_line_interaction {
                         if interaction.dragging {
                             if let Some((pos, _)) = axis_lines[interaction.axis_index] {
-                                let hyper_sphere = &mut self.hyper_spheres[self.selected_hyper_sphere.expect("if an axis is being dragged a hyper sphere must be selected")];
+                                let object = &mut self.objects[self.selected_hyper_sphere.expect(
+                                    "if an axis is being dragged a hyper sphere must be selected",
+                                )];
                                 let axis = Self::axis_from_index(interaction.axis_index);
                                 let pos_delta = pos - interaction.start_pos;
-                                hyper_sphere.position += axis * pos_delta;
+                                object.move_position(axis * pos_delta);
                                 break 'axis_lines;
                             }
                         }
@@ -535,12 +552,13 @@ impl State {
         }
     }
 
-    fn get_axis_lines(camera: &Camera, hyper_sphere: &HyperSphere) -> [Option<(GpuLine, f32)>; 4] {
+    fn get_axis_lines(camera: &Camera, object: &Object) -> [Option<(GpuLine, f32)>; 4] {
         let camera_transform =
             Transform::translation(camera.position) * Transform::from_rotor(camera.get_rotation());
 
         // applying the inverse camera transform to the position
-        let position = (!camera_transform).transform(hyper_sphere.position);
+        let object_position = object.position();
+        let position = (!camera_transform).transform(object_position);
         if position.x >= 0.0 {
             let position = cgmath::vec2(position.z / position.x, position.y / position.x);
 
@@ -552,7 +570,7 @@ impl State {
             ];
 
             axis_lines.map(|(axis_offset, axis_color)| {
-                let end_point = (!camera_transform).transform(hyper_sphere.position + axis_offset);
+                let end_point = (!camera_transform).transform(object_position + axis_offset);
                 if end_point.x >= 0.0 {
                     Some((
                         GpuLine {
@@ -572,6 +590,22 @@ impl State {
         }
     }
 
+    fn objects_to_gpu_objects(objects: &[Object]) -> (Vec<GpuHyperSphere>, Vec<GpuHyperPlane>) {
+        let mut hyper_spheres = vec![];
+        let mut hyper_planes = vec![];
+        for object in objects {
+            match object {
+                Object::HyperSphere(hyper_sphere) => {
+                    hyper_spheres.push(GpuHyperSphere::from_hyper_sphere(hyper_sphere));
+                }
+                Object::HyperPlane(hyper_plane) => {
+                    hyper_planes.push(GpuHyperPlane::from_hyper_plane(hyper_plane));
+                }
+            }
+        }
+        (hyper_spheres, hyper_planes)
+    }
+
     pub fn render(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Texture) {
         let wgpu::Extent3d { width, height, .. } = texture.size();
         assert_eq!(texture.size(), self.ray_tracing_texture.size());
@@ -582,27 +616,31 @@ impl State {
             queue,
             (Some(&GpuCamera::from_camera(&self.camera)),),
         );
-        self.objects_buffer.write(
-            device,
-            queue,
-            (
-                Some(
-                    &self
-                        .materials
-                        .iter()
-                        .map(GpuMaterial::from_material)
-                        .collect::<Vec<_>>(),
+
+        {
+            let (hyper_spheres, hyper_planes) = Self::objects_to_gpu_objects(&self.objects);
+            self.objects_buffer.write(
+                device,
+                queue,
+                (
+                    Some(
+                        &self
+                            .materials
+                            .iter()
+                            .map(GpuMaterial::from_material)
+                            .collect::<Vec<_>>(),
+                    ),
+                    Some(&GpuLengthArray {
+                        length: ArrayLength,
+                        data: hyper_spheres,
+                    }),
+                    Some(&GpuLengthArray {
+                        length: ArrayLength,
+                        data: hyper_planes,
+                    }),
                 ),
-                Some(&GpuLengthArray {
-                    length: ArrayLength,
-                    data: self
-                        .hyper_spheres
-                        .iter()
-                        .map(GpuHyperSphere::from_hyper_sphere)
-                        .collect::<Vec<_>>(),
-                }),
-            ),
-        );
+            );
+        }
 
         let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Main Rendering Encoder"),
@@ -666,7 +704,7 @@ impl State {
             ];
 
             if let Some(index) = self.selected_hyper_sphere {
-                let mut axis_lines = Self::get_axis_lines(&self.camera, &self.hyper_spheres[index]);
+                let mut axis_lines = Self::get_axis_lines(&self.camera, &self.objects[index]);
                 for (index, line) in axis_lines.iter_mut().enumerate() {
                     if let Some((line, _)) = line {
                         if self

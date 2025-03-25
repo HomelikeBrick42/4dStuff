@@ -1,4 +1,9 @@
-use crate::{camera::Camera, hyper_sphere::HyperSphere, material::Material};
+use crate::{
+    camera::Camera,
+    material::Material,
+    objects::{HyperPlane, HyperSphere},
+};
+use cgmath::InnerSpace;
 use encase::{ArrayLength, ShaderSize, ShaderType};
 
 #[derive(Debug, ShaderType)]
@@ -77,6 +82,28 @@ impl GpuHyperSphere {
         Self {
             position,
             radius,
+            material,
+        }
+    }
+}
+
+#[derive(Debug, ShaderType)]
+pub struct GpuHyperPlane {
+    pub normal: cgmath::Vector4<f32>,
+    pub distance: f32,
+    pub material: u32,
+}
+
+impl GpuHyperPlane {
+    pub fn from_hyper_plane(hyper_plane: &HyperPlane) -> Self {
+        let HyperPlane {
+            position,
+            normal,
+            material,
+        } = *hyper_plane;
+        Self {
+            normal,
+            distance: position.dot(normal),
             material,
         }
     }

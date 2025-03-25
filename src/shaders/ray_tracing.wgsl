@@ -42,6 +42,20 @@ struct HyperSpheres {
 @group(2) @binding(1)
 var<storage, read> hyper_spheres: HyperSpheres;
 
+struct HyperPlane {
+    normal: vec4<f32>,
+    distance: f32,
+    material: u32,
+}
+
+struct HyperPlanes {
+    length: u32,
+    data: array<HyperPlane>,
+}
+
+@group(2) @binding(2)
+var<storage, read> hyper_planes: HyperPlanes;
+
 struct Ray {
     origin: vec4<f32>,
     direction: vec4<f32>,
@@ -79,6 +93,26 @@ fn hyper_sphere_hit(ray: Ray, hyper_sphere: HyperSphere) -> Hit {
     return hit;
 }
 
+fn hyper_plane_hit(ray: Ray, hyper_plane: HyperPlane) -> Hit {
+    var hit: Hit;
+    hit.hit = false;
+
+    let denom = dot(hyper_plane.normal, ray.direction);
+    if abs(denom) > 0.00001 {
+        let p0 = hyper_plane.normal * hyper_plane.distance;
+        hit.distance = dot(p0 - ray.origin, hyper_plane.normal) / denom;
+
+        if hit.distance > 0.0 {
+            hit.hit = true;
+            hit.position = ray.origin + ray.direction * hit.distance;
+            hit.normal = hyper_plane.normal * - sign(denom);
+            hit.material = hyper_plane.material;
+        }
+    }
+
+    return hit;
+}
+
 fn ray_hit(ray: Ray) -> Hit {
     var hit: Hit;
     hit.hit = false;
@@ -87,6 +121,13 @@ fn ray_hit(ray: Ray) -> Hit {
         let hyper_sphere_hit = hyper_sphere_hit(ray, hyper_spheres.data[i]);
         if hyper_sphere_hit.hit && (!hit.hit || hyper_sphere_hit.distance < hit.distance) {
             hit = hyper_sphere_hit;
+        }
+    }
+
+    for (var i = 0u; i < hyper_planes.length; i += 1u) {
+        let hyper_plane_hit = hyper_plane_hit(ray, hyper_planes.data[i]);
+        if hyper_plane_hit.hit && (!hit.hit || hyper_plane_hit.distance < hit.distance) {
+            hit = hyper_plane_hit;
         }
     }
 
@@ -102,7 +143,7 @@ fn ray_color(ray: Ray) -> vec3<f32> {
         color = material.color * camera.ambient_light_color;
 
         var sun_ray: Ray;
-        sun_ray.origin = hit.position;
+        sun_ray.origin = hit.position + hit.normal * 0.001;
         sun_ray.direction = camera.sun_direction;
         let sun_hit = ray_hit(sun_ray);
         if !sun_hit.hit {
