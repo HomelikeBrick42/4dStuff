@@ -5,7 +5,7 @@ use crate::{
         GpuCamera, GpuHyperPlane, GpuHyperSphere, GpuLengthArray, GpuLine, GpuMaterial, GpuUiInfo,
     },
     material::Material,
-    math::Transform,
+    math::{Rotor, Transform},
     objects::{HyperPlane, HyperSphere, Object},
     ray::{Ray, RayIntersect},
 };
@@ -47,6 +47,7 @@ pub struct State {
 
     selected_hyper_sphere: Option<usize>,
     axis_line_interaction: Option<AxisLineInteraction>,
+    use_camera_axes: bool,
     mouse_locked: bool,
 }
 
@@ -357,6 +358,7 @@ impl State {
 
             selected_hyper_sphere: None,
             axis_line_interaction: None,
+            use_camera_axes: false,
             mouse_locked: false,
         }
     }
@@ -368,16 +370,27 @@ impl State {
     }
 
     pub fn key(&mut self, key: KeyCode, state: ElementState, window: &winit::window::Window) {
-        if let (KeyCode::Escape, ElementState::Pressed) = (key, state) {
-            if self.mouse_locked {
-                _ = window.set_cursor_grab(winit::window::CursorGrabMode::None);
-                window.set_cursor_visible(true);
-                self.mouse_locked = false;
-            } else {
-                _ = window.set_cursor_grab(winit::window::CursorGrabMode::Confined);
-                window.set_cursor_visible(false);
-                self.mouse_locked = true;
+        match (key, state) {
+            (KeyCode::Escape, ElementState::Pressed) => {
+                if self.mouse_locked {
+                    _ = window.set_cursor_grab(winit::window::CursorGrabMode::None);
+                    window.set_cursor_visible(true);
+                    self.mouse_locked = false;
+                } else {
+                    _ = window.set_cursor_grab(winit::window::CursorGrabMode::Confined);
+                    window.set_cursor_visible(false);
+                    self.mouse_locked = true;
+                }
             }
+
+            (KeyCode::KeyG, ElementState::Pressed) => {
+                self.use_camera_axes = !self.use_camera_axes;
+                if let Some(interaction) = &mut self.axis_line_interaction {
+                    interaction.dragging = false;
+                }
+            }
+
+            _ => (),
         }
 
         self.camera.key(key, state);
@@ -464,8 +477,11 @@ impl State {
         if !self.mouse_locked {
             if let Some(selected_hyper_sphere) = self.selected_hyper_sphere {
                 'axis_lines: {
-                    let axis_lines =
-                        Self::get_axis_lines(&self.camera, &self.objects[selected_hyper_sphere]);
+                    let axis_lines = Self::get_axis_lines(
+                        &self.camera,
+                        &self.objects[selected_hyper_sphere],
+                        self.use_camera_axes,
+                    );
 
                     let axis_lines = axis_lines.map(|axis_line| {
                         axis_line.and_then(|(axis_line, _)| {
@@ -480,7 +496,12 @@ impl State {
                             let pos = (uv - axis_line.a).dot(a_to_b) / line_length;
                             let dist = (uv - axis_line.a).dot(normal).abs();
 
-                            if dist > axis_line.width * 4.0 {
+                            if dist > axis_line.width * 4.0
+                                && self
+                                    .axis_line_interaction
+                                    .as_ref()
+                                    .is_none_or(|interaction| !interaction.dragging)
+                            {
                                 return None;
                             }
 
@@ -494,7 +515,10 @@ impl State {
                                 let object = &mut self.objects[self.selected_hyper_sphere.expect(
                                     "if an axis is being dragged a hyper sphere must be selected",
                                 )];
-                                let axis = Self::axis_from_index(interaction.axis_index);
+                                let axis = Self::axis_from_index(
+                                    interaction.axis_index,
+                                    self.use_camera_axes.then(|| self.camera.get_rotation()),
+                                );
                                 let pos_delta = pos - interaction.start_pos;
                                 object.move_position(axis * pos_delta);
                                 break 'axis_lines;
@@ -542,17 +566,26 @@ impl State {
         self.final_texture = final_texture(device, width, height);
     }
 
-    const fn axis_from_index(index: usize) -> cgmath::Vector4<f32> {
-        match index {
+    fn axis_from_index(index: usize, rotation: Option<Rotor>) -> cgmath::Vector4<f32> {
+        let axis = match index {
             0 => cgmath::vec4(1.0, 0.0, 0.0, 0.0),
             1 => cgmath::vec4(0.0, 1.0, 0.0, 0.0),
             2 => cgmath::vec4(0.0, 0.0, 1.0, 0.0),
             3 => cgmath::vec4(0.0, 0.0, 0.0, 1.0),
             _ => panic!("invalid index"),
+        };
+        if let Some(rotation) = rotation {
+            rotation.rotate(axis)
+        } else {
+            axis
         }
     }
 
-    fn get_axis_lines(camera: &Camera, object: &Object) -> [Option<(GpuLine, f32)>; 4] {
+    fn get_axis_lines(
+        camera: &Camera,
+        object: &Object,
+        use_camera_axes: bool,
+    ) -> [Option<(GpuLine, f32)>; 4] {
         let camera_transform =
             Transform::translation(camera.position) * Transform::from_rotor(camera.get_rotation());
 
@@ -562,12 +595,27 @@ impl State {
         if position.x >= 0.0 {
             let position = cgmath::vec2(position.z / position.x, position.y / position.x);
 
-            let axis_lines = [
-                (Self::axis_from_index(0), cgmath::vec4(1.0, 0.2, 0.2, 1.0)),
-                (Self::axis_from_index(1), cgmath::vec4(0.2, 1.0, 0.2, 1.0)),
-                (Self::axis_from_index(2), cgmath::vec4(0.2, 0.2, 1.0, 1.0)),
-                (Self::axis_from_index(3), cgmath::vec4(1.0, 0.2, 1.0, 1.0)),
-            ];
+            let axis_lines = {
+                let rotation = use_camera_axes.then_some(camera_transform.rotor_part());
+                [
+                    (
+                        Self::axis_from_index(0, rotation),
+                        cgmath::vec4(1.0, 0.2, 0.2, 1.0),
+                    ),
+                    (
+                        Self::axis_from_index(1, rotation),
+                        cgmath::vec4(0.2, 1.0, 0.2, 1.0),
+                    ),
+                    (
+                        Self::axis_from_index(2, rotation),
+                        cgmath::vec4(0.2, 0.2, 1.0, 1.0),
+                    ),
+                    (
+                        Self::axis_from_index(3, rotation),
+                        cgmath::vec4(1.0, 0.2, 1.0, 1.0),
+                    ),
+                ]
+            };
 
             axis_lines.map(|(axis_offset, axis_color)| {
                 let end_point = (!camera_transform).transform(object_position + axis_offset);
@@ -704,7 +752,8 @@ impl State {
             ];
 
             if let Some(index) = self.selected_hyper_sphere {
-                let mut axis_lines = Self::get_axis_lines(&self.camera, &self.objects[index]);
+                let mut axis_lines =
+                    Self::get_axis_lines(&self.camera, &self.objects[index], self.use_camera_axes);
                 for (index, line) in axis_lines.iter_mut().enumerate() {
                     if let Some((line, _)) = line {
                         if self
