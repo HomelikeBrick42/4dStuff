@@ -20,7 +20,7 @@ This is a 4d sandbox that im working on, it currently supports:
 | Q/E                                     | Move down/up along the Y axis relative to the camera                                                                               |
 | R/F                                     | Move ana/kata along the W axis relative to the camera                                                                              |
 | Mouse right/left (when mouse is locked) | Rotate in the xz plane relative to the camera                                                                                      |
-| Mouse up/down (when mouse is locked)    | Rotate in the xy plane relative to the camera (this rotation will not effect any other rotations and is applied afterwards)        |
+| Mouse up/down (when mouse is locked)    | Rotate in the xy plane relative to the camera (when not in volume view this rotation will not effect any other rotations and is applied afterwards) |
 | Mouse scroll (when mouse is locked) (when not in volume view) | Rotate in the zw plane relative to the camera |
 | Mouse scroll (when mouse is locked) (when in volume view)     | Rotate in the yz plane relative to the camera |
 
