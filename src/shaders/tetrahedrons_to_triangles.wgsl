@@ -10,17 +10,17 @@ struct Tetrahedrons {
     data: array<Tetrahedron>,
 }
 
-@group(0) @binding(0)
+@group(1) @binding(0)
 var<storage, read> tetrahedrons: Tetrahedrons;
 
 struct Vertex {
     position: vec3<f32>,
 }
 
-@group(0) @binding(1)
+@group(1) @binding(1)
 var<storage, read_write> vertices: array<Vertex>;
 
-@group(0) @binding(2)
+@group(1) @binding(2)
 var<storage, read_write> indices: array<u32>;
 
 struct Indirect {
@@ -33,7 +33,7 @@ struct Indirect {
     vertex_count: atomic<u32>,
 }
 
-@group(0) @binding(3)
+@group(1) @binding(3)
 var<storage, read_write> indirect: Indirect;
 
 // try messing with workgroup size in the future

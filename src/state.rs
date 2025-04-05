@@ -1,6 +1,6 @@
 use crate::{
     camera::Camera,
-    gpu_buffers::{Buffer as _, DynamicBuffer, FixedSizeBuffer},
+    gpu_buffers::{Buffer as _, BufferCreationInfo, BufferGroup, DynamicBuffer, FixedSizeBuffer},
     math::Transform,
 };
 use encase::{ArrayLength, ShaderSize, ShaderType};
@@ -42,9 +42,26 @@ struct GpuIndirectBuffer {
     triangle_count: u32,
 }
 
+#[derive(Debug, Clone, Copy, ShaderType)]
+struct GpuCamera {
+    aspect: f32,
+    transform: Transform,
+}
+
+impl GpuCamera {
+    fn from_camera(camera: &Camera, aspect: f32) -> Self {
+        Self {
+            aspect,
+            transform: Transform::translation(camera.position)
+                * Transform::from_rotor(camera.get_rotation()),
+        }
+    }
+}
+
 pub struct State {
     mouse_locked: bool,
     camera: Camera,
+    camera_buffer: BufferGroup<(FixedSizeBuffer<GpuCamera>,)>,
 
     final_texture: wgpu::Texture,
 
@@ -62,6 +79,22 @@ pub struct State {
 impl State {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> State {
         let camera = Camera::default();
+        let camera_buffer = BufferGroup::new(
+            device,
+            "Camera",
+            (BufferCreationInfo {
+                buffer: FixedSizeBuffer::new(
+                    device,
+                    queue,
+                    "Camera Buffer",
+                    wgpu::BufferUsages::UNIFORM,
+                    &GpuCamera::from_camera(&camera, 1.0),
+                ),
+                binding_type: wgpu::BufferBindingType::Uniform,
+                visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::VERTEX,
+            },),
+        );
+
         let final_texture = final_texture(device, 1, 1);
 
         let tetrahedrons = GpuTetrahedrons {
@@ -154,7 +187,10 @@ impl State {
         let tetrahedron_to_triangle_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Tetrahedron To Triangle Pipeline Layout"),
-                bind_group_layouts: &[&tetrahedron_to_triangles_bind_group_layout],
+                bind_group_layouts: &[
+                    camera_buffer.bind_group_layout(),
+                    &tetrahedron_to_triangles_bind_group_layout,
+                ],
                 push_constant_ranges: &[],
             });
         let tetrahedron_to_triangle_compute_pipeline =
@@ -172,7 +208,7 @@ impl State {
         let tetrahedron_triangle_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Tetrahedron Triangle Pipeline Layout"),
-                bind_group_layouts: &[],
+                bind_group_layouts: &[camera_buffer.bind_group_layout()],
                 push_constant_ranges: &[],
             });
         let tetrahedron_triangle_render_pipeline =
@@ -222,8 +258,9 @@ impl State {
             });
 
         State {
-            camera,
             mouse_locked: false,
+            camera,
+            camera_buffer,
 
             final_texture,
             tetrahedron_count,
@@ -300,11 +337,17 @@ impl State {
         let size @ wgpu::Extent3d { width, height, .. } = texture.size();
         assert_eq!(size, self.final_texture.size());
 
-        _ = width;
-        _ = height;
-
         // upload
         {
+            self.camera_buffer.write(
+                device,
+                queue,
+                (Some(&GpuCamera::from_camera(
+                    &self.camera,
+                    width as f32 / height as f32,
+                )),),
+            );
+
             // tetrahedrons
             {
                 let transform = Transform::translation(self.camera.position)
@@ -312,9 +355,9 @@ impl State {
                 let tetrahedrons = GpuTetrahedrons {
                     count: ArrayLength,
                     data: vec![GpuTetrahedron {
-                        a: (!transform).transform(cgmath::vec4(1.0, 1.0, 0.0, 0.0)),
-                        b: (!transform).transform(cgmath::vec4(1.0, -1.0, 1.0, 0.0)),
-                        c: (!transform).transform(cgmath::vec4(1.0, -1.0, -1.0, 0.0)),
+                        a: (!transform).transform(cgmath::vec4(1.0, 0.5, 0.0, 0.0)),
+                        b: (!transform).transform(cgmath::vec4(1.0, -0.5, 0.5, 0.0)),
+                        c: (!transform).transform(cgmath::vec4(1.0, -0.5, -0.5, 0.0)),
                         d: (!transform).transform(cgmath::vec4(0.0, 0.0, 0.0, 0.0)),
                     }],
                 };
@@ -366,7 +409,8 @@ impl State {
                 });
 
             compute_pass.set_pipeline(&self.tetrahedron_to_triangle_compute_pipeline);
-            compute_pass.set_bind_group(0, &self.tetrahedron_to_triangles_bind_group, &[]);
+            compute_pass.set_bind_group(0, self.camera_buffer.bind_group(), &[]);
+            compute_pass.set_bind_group(1, &self.tetrahedron_to_triangles_bind_group, &[]);
             compute_pass.dispatch_workgroups(self.tetrahedron_count as _, 1, 1);
         }
 
@@ -394,6 +438,7 @@ impl State {
             });
 
             render_pass.set_pipeline(&self.tetrahedron_triangle_render_pipeline);
+            render_pass.set_bind_group(0, self.camera_buffer.bind_group(), &[]);
             render_pass.set_vertex_buffer(0, self.tetrahedron_vertex_buffer.slice(..));
             render_pass.set_index_buffer(
                 self.tetrahedron_index_buffer.slice(..),
