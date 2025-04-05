@@ -1,6 +1,7 @@
 use crate::{
     camera::Camera,
     gpu_buffers::{Buffer as _, DynamicBuffer, FixedSizeBuffer},
+    math::Transform,
 };
 use encase::{ArrayLength, ShaderSize, ShaderType};
 use winit::{
@@ -26,21 +27,19 @@ struct GpuTetrahedrons {
 }
 
 #[derive(Debug, Clone, Copy, ShaderType)]
-struct GpuTriangle {
-    a: cgmath::Vector3<f32>,
-    b: cgmath::Vector3<f32>,
-    c: cgmath::Vector3<f32>,
+struct GpuVertex {
+    position: cgmath::Vector3<f32>,
 }
 
 #[derive(Debug, Clone, Copy, ShaderType)]
 struct GpuIndirectBuffer {
-    pub index_count: u32,
-    pub instance_count: u32,
-    pub first_index: u32,
-    pub base_vertex: i32,
-    pub first_instance: u32,
+    index_count: u32,
+    instance_count: u32,
+    first_index: u32,
+    base_vertex: i32,
+    first_instance: u32,
     /// this is not used by the indirect draw, but for inserting vertices in the compute shader
-    pub vertex_count: u32,
+    triangle_count: u32,
 }
 
 pub struct State {
@@ -54,8 +53,9 @@ pub struct State {
     tetrahedron_triangle_buffer: wgpu::Buffer,
     tetrahedron_index_buffer: wgpu::Buffer,
     tetrahedron_indirect_buffer: FixedSizeBuffer<GpuIndirectBuffer>,
-    tetrahedron_bind_group_layout: wgpu::BindGroupLayout,
-    tetrahedron_bind_group: wgpu::BindGroup,
+    tetrahedron_to_triangles_bind_group_layout: wgpu::BindGroupLayout,
+    tetrahedron_to_triangles_bind_group: wgpu::BindGroup,
+    tetrahedron_to_triangle_compute_pipeline: wgpu::ComputePipeline,
 }
 
 impl State {
@@ -85,16 +85,16 @@ impl State {
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT,
             &GpuIndirectBuffer {
                 index_count: 0,
-                instance_count: 0,
+                instance_count: 1,
                 first_index: 0,
                 base_vertex: 0,
                 first_instance: 0,
-                vertex_count: 0,
+                triangle_count: 0,
             },
         );
-        let tetrahedron_bind_group_layout =
+        let tetrahedron_to_triangles_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Tetrahedron Bind Group Layout"),
+                label: Some("Tetrahedron To Triangles Bind Group Layout"),
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
@@ -102,7 +102,7 @@ impl State {
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
-                            min_binding_size: Some(GpuTetrahedrons::min_size()),
+                            min_binding_size: None,
                         },
                         count: None,
                     },
@@ -112,7 +112,7 @@ impl State {
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
-                            min_binding_size: Some(GpuTriangle::SHADER_SIZE),
+                            min_binding_size: None,
                         },
                         count: None,
                     },
@@ -122,7 +122,7 @@ impl State {
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
-                            min_binding_size: Some(u32::SHADER_SIZE),
+                            min_binding_size: None,
                         },
                         count: None,
                     },
@@ -130,7 +130,7 @@ impl State {
                         binding: 3,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
                             min_binding_size: Some(GpuIndirectBuffer::SHADER_SIZE),
                         },
@@ -138,14 +138,33 @@ impl State {
                     },
                 ],
             });
-        let tetrahedron_bind_group = tetrahedron_bind_group(
+        let tetrahedron_to_triangles_bind_group = tetrahedron_to_triangles_bind_group(
             device,
-            &tetrahedron_bind_group_layout,
+            &tetrahedron_to_triangles_bind_group_layout,
             tetrahedron_buffer.buffer(),
             &tetrahedron_triangle_buffer,
             &tetrahedron_index_buffer,
             tetrahedron_indirect_buffer.buffer(),
         );
+
+        let tetrahedron_to_triangle_shader = device.create_shader_module(wgpu::include_wgsl!(
+            "./shaders/tetrahedrons_to_triangles.wgsl"
+        ));
+        let tetrahedron_to_triangle_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Tetrahedron To Triangle Pipeline Layout"),
+                bind_group_layouts: &[&tetrahedron_to_triangles_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+        let tetrahedron_to_triangle_compute_pipeline =
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("Tetrahedron To Triangle Compute Pipeline"),
+                layout: Some(&tetrahedron_to_triangle_pipeline_layout),
+                module: &tetrahedron_to_triangle_shader,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                cache: Default::default(),
+            });
 
         State {
             camera,
@@ -157,8 +176,9 @@ impl State {
             tetrahedron_triangle_buffer,
             tetrahedron_index_buffer,
             tetrahedron_indirect_buffer,
-            tetrahedron_bind_group_layout,
-            tetrahedron_bind_group,
+            tetrahedron_to_triangles_bind_group_layout,
+            tetrahedron_to_triangles_bind_group,
+            tetrahedron_to_triangle_compute_pipeline,
         }
     }
 
@@ -227,32 +247,74 @@ impl State {
         _ = width;
         _ = height;
 
+        // upload
         {
-            let tetrahedrons = GpuTetrahedrons {
-                count: ArrayLength,
-                data: vec![],
-            };
+            // tetrahedrons
+            {
+                let transform = Transform::translation(self.camera.position)
+                    * Transform::from_rotor(self.camera.get_rotation());
+                let tetrahedrons = GpuTetrahedrons {
+                    count: ArrayLength,
+                    data: vec![GpuTetrahedron {
+                        a: (!transform).transform(cgmath::vec4(0.0, 1.0, 1.0, 0.0)),
+                        b: (!transform).transform(cgmath::vec4(1.0, -1.0, 1.0, 0.0)),
+                        c: (!transform).transform(cgmath::vec4(-1.0, -1.0, 1.0, 0.0)),
+                        d: (!transform).transform(cgmath::vec4(0.0, 0.0, 0.0, 0.0)),
+                    }],
+                };
 
-            self.tetrahedron_count = tetrahedrons.data.len();
-            if self.tetrahedron_buffer.write(device, queue, &tetrahedrons) {
-                self.tetrahedron_triangle_buffer =
-                    tetrahedron_triangle_buffer(device, self.tetrahedron_count);
-                self.tetrahedron_index_buffer =
-                    tetrahedron_index_buffer(device, self.tetrahedron_count);
-                self.tetrahedron_bind_group = tetrahedron_bind_group(
-                    device,
-                    &self.tetrahedron_bind_group_layout,
-                    self.tetrahedron_buffer.buffer(),
-                    &self.tetrahedron_triangle_buffer,
-                    &self.tetrahedron_index_buffer,
-                    self.tetrahedron_indirect_buffer.buffer(),
-                );
+                self.tetrahedron_count = tetrahedrons.data.len();
+                if self.tetrahedron_buffer.write(device, queue, &tetrahedrons) {
+                    self.tetrahedron_triangle_buffer =
+                        tetrahedron_triangle_buffer(device, self.tetrahedron_count);
+                    self.tetrahedron_index_buffer =
+                        tetrahedron_index_buffer(device, self.tetrahedron_count);
+                    self.tetrahedron_to_triangles_bind_group = tetrahedron_to_triangles_bind_group(
+                        device,
+                        &self.tetrahedron_to_triangles_bind_group_layout,
+                        self.tetrahedron_buffer.buffer(),
+                        &self.tetrahedron_triangle_buffer,
+                        &self.tetrahedron_index_buffer,
+                        self.tetrahedron_indirect_buffer.buffer(),
+                    );
+                }
             }
+
+            // reset triangle indirect buffer
+            self.tetrahedron_indirect_buffer.write(
+                device,
+                queue,
+                &GpuIndirectBuffer {
+                    index_count: 0,
+                    instance_count: 1,
+                    first_index: 0,
+                    base_vertex: 0,
+                    first_instance: 0,
+                    triangle_count: 0,
+                },
+            );
+
+            queue.submit(std::iter::empty());
         }
 
         let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Main Rendering Encoder"),
         });
+
+        // compute triangles from tetrahedrons
+        {
+            let mut compute_pass =
+                command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("Tetrahedron To Triangle Compute Pass"),
+                    timestamp_writes: None,
+                });
+
+            compute_pass.set_pipeline(&self.tetrahedron_to_triangle_compute_pipeline);
+            compute_pass.set_bind_group(0, &self.tetrahedron_to_triangles_bind_group, &[]);
+            compute_pass.dispatch_workgroups(self.tetrahedron_count as _, 1, 1);
+        }
+
+        // render to final texture
         {
             let _render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Main Render Pass"),
@@ -275,6 +337,8 @@ impl State {
                 ..Default::default()
             });
         }
+
+        // copy final texture to screen
         command_encoder.copy_texture_to_texture(
             self.final_texture.as_image_copy(),
             texture.as_image_copy(),
@@ -305,7 +369,7 @@ fn final_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Textur
 fn tetrahedron_triangle_buffer(device: &wgpu::Device, tetrahedron_count: usize) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("Tetrahedron Triangle Buffer"),
-        size: tetrahedron_count.max(1) as wgpu::BufferAddress * GpuTriangle::SHADER_SIZE.get() * 4,
+        size: tetrahedron_count.max(1) as wgpu::BufferAddress * GpuVertex::SHADER_SIZE.get() * 4,
         usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::VERTEX,
         mapped_at_creation: false,
     })
@@ -320,7 +384,7 @@ fn tetrahedron_index_buffer(device: &wgpu::Device, tetrahedron_count: usize) -> 
     })
 }
 
-fn tetrahedron_bind_group(
+fn tetrahedron_to_triangles_bind_group(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
     tetrahedron_buffer: &wgpu::Buffer,
@@ -329,7 +393,7 @@ fn tetrahedron_bind_group(
     indirect_buffer: &wgpu::Buffer,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("Tetrahedron Bind Group"),
+        label: Some("Tetrahedron To Triangles Bind Group"),
         layout,
         entries: &[
             wgpu::BindGroupEntry {
