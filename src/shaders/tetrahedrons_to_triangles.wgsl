@@ -62,12 +62,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             let b = tetrahedron.positions[j];
             if sign(a.w) != sign(b.w) {
                 let distance = abs(a.w) + abs(b.w);
-                if a.w <= 0.0 {
-                    positions[position_count] = mix(a.xyz, b.xyz, abs(a.w) / distance);
-                }
-                else {
-                    positions[position_count] = mix(b.xyz, a.xyz, abs(b.w) / distance);
-                }
+                positions[position_count] = mix(a.xyz, b.xyz, abs(a.w) / distance);
                 position_count += 1u;
             }
         }
