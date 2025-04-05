@@ -121,7 +121,7 @@ impl State {
         command_encoder.copy_texture_to_texture(
             self.final_texture.as_image_copy(),
             texture.as_image_copy(),
-            texture.size(),
+            size,
         );
 
         queue.submit(std::iter::once(command_encoder.finish()));
