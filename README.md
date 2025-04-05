@@ -1,10 +1,7 @@
-# 4D Ray Tracer
+# 4D Rendering
 
 This is a 4d sandbox that im working on, it currently supports:
 
-- Hyperspheres
-- Hyperplanes
-- Translation Gizmos
 - Volume View (stolen from the 4D Golf game)
 
 ## Controls
@@ -12,7 +9,6 @@ This is a 4d sandbox that im working on, it currently supports:
 | Key(s)                                                        | Behavour                                                                                                                                            |
 | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Escape                                                        | Toggle mouse lock                                                                                                                                   |
-| Left Click (when mouse is unlocked)                           | Select object or interact with gizmo                                                                                                                |
 | W/S                                                           | Move foward/backwards along the X axis relative to the camera                                                                                       |
 | A/D                                                           | Move left/right along the Z axis relative to the camera                                                                                             |
 | Q/E                                                           | Move down/up along the Y axis relative to the camera                                                                                                |
@@ -22,7 +18,6 @@ This is a 4d sandbox that im working on, it currently supports:
 | Mouse scroll (when mouse is locked) (when not in volume view) | Rotate in the zw plane relative to the camera                                                                                                       |
 | Mouse scroll (when mouse is locked) (when in volume view)     | Rotate in the yz plane relative to the camera                                                                                                       |
 | V                                                             | Toggle volume view                                                                                                                                  |
-| G                                                             | Toggle gizmos being relative to camera rotation                                                                                                     |
 
 ## What is volume view?
 
