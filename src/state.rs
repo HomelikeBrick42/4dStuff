@@ -44,16 +44,16 @@ struct GpuIndirectBuffer {
 
 #[derive(Debug, Clone, Copy, ShaderType)]
 struct GpuCamera {
-    aspect: f32,
     transform: Transform,
+    aspect: f32,
 }
 
 impl GpuCamera {
     fn from_camera(camera: &Camera, aspect: f32) -> Self {
         Self {
             aspect,
-            transform: Transform::translation(camera.position)
-                * Transform::from_rotor(camera.get_rotation()),
+            transform: !(Transform::translation(camera.position)
+                * Transform::from_rotor(camera.get_rotation())),
         }
     }
 }
@@ -350,15 +350,13 @@ impl State {
 
             // tetrahedrons
             {
-                let transform = Transform::translation(self.camera.position)
-                    * Transform::from_rotor(self.camera.get_rotation());
                 let tetrahedrons = GpuTetrahedrons {
                     count: ArrayLength,
                     data: vec![GpuTetrahedron {
-                        a: (!transform).transform(cgmath::vec4(1.0, 0.5, 0.0, 0.0)),
-                        b: (!transform).transform(cgmath::vec4(1.0, -0.5, 0.5, 0.0)),
-                        c: (!transform).transform(cgmath::vec4(1.0, -0.5, -0.5, 0.0)),
-                        d: (!transform).transform(cgmath::vec4(0.0, 0.0, 0.0, 0.0)),
+                        a: cgmath::vec4(1.0, 0.5, 0.0, 0.0),
+                        b: cgmath::vec4(1.0, -0.5, 0.5, 0.0),
+                        c: cgmath::vec4(1.0, -0.5, -0.5, 0.0),
+                        d: cgmath::vec4(0.0, 0.0, 0.0, 0.0),
                     }],
                 };
 

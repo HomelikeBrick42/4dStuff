@@ -7,6 +7,7 @@ struct VertexOutput {
 }
 
 struct Camera {
+    transform: Transform,
     aspect: f32,
 }
 
@@ -24,4 +25,23 @@ fn vertex(in: VertexInput) -> VertexOutput {
 @fragment
 fn pixel(in: VertexOutput) -> @location(0) vec4<f32> {
     return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+}
+
+struct Transform {
+    s: f32,
+    e01: f32,
+    e02: f32,
+    e03: f32,
+    e04: f32,
+    e12: f32,
+    e13: f32,
+    e14: f32,
+    e23: f32,
+    e24: f32,
+    e34: f32,
+    e0123: f32,
+    e0124: f32,
+    e0134: f32,
+    e0234: f32,
+    e1234: f32,
 }
