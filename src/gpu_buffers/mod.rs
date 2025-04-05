@@ -1,7 +1,7 @@
-mod array_buffer;
+mod dynamic_buffer;
 mod fixed_size_buffer;
 
-pub use array_buffer::*;
+pub use dynamic_buffer::*;
 pub use fixed_size_buffer::*;
 
 mod private {
