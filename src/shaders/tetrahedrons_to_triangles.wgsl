@@ -7,10 +7,7 @@ struct Camera {
 var<uniform> camera: Camera;
 
 struct Tetrahedron {
-    a: vec4<f32>,
-    b: vec4<f32>,
-    c: vec4<f32>,
-    d: vec4<f32>,
+    positions: array<vec4<f32>, 4>,
 }
 
 struct Tetrahedrons {
@@ -53,20 +50,49 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     }
 
     var tetrahedron = tetrahedrons.data[tetrahedron_index];
-    tetrahedron.a = transform_point(camera.transform, tetrahedron.a);
-    tetrahedron.b = transform_point(camera.transform, tetrahedron.b);
-    tetrahedron.c = transform_point(camera.transform, tetrahedron.c);
-    tetrahedron.d = transform_point(camera.transform, tetrahedron.d);
+    for (var i = 0u; i < 4; i += 1u) {
+        tetrahedron.positions[i] = transform_point(camera.transform, tetrahedron.positions[i]);
+    }
 
-    let vertex_index = atomicAdd(&indirect.vertex_count, 3u);
-    vertices[vertex_index + 0u].position = tetrahedron.a.xyz;
-    vertices[vertex_index + 1u].position = tetrahedron.b.xyz;
-    vertices[vertex_index + 2u].position = tetrahedron.c.xyz;
+    var positions: array<vec3<f32>, 4>;
+    var position_count = 0u;
+    for (var i = 0u; i < 4; i += 1u) {
+        for (var j = i + 1u; i < 4; i += 1u) {
+            let a = tetrahedron.positions[i];
+            let b = tetrahedron.positions[j];
+            if sign(a.w) != sign(b.w) {
+                let distance = abs(a.w) + abs(b.w);
+                if a.w <= 0.0 {
+                    positions[position_count] = mix(a.xyz, b.xyz, abs(a.w) / distance);
+                }
+                else {
+                    positions[position_count] = mix(b.xyz, a.xyz, abs(b.w) / distance);
+                }
+                position_count += 1u;
+            }
+        }
+    }
 
-    let index_index = atomicAdd(&indirect.index_count, 3u);
-    indices[index_index + 0u] = vertex_index + 0u;
-    indices[index_index + 1u] = vertex_index + 1u;
-    indices[index_index + 2u] = vertex_index + 2u;
+    let vertex_index = atomicAdd(&indirect.vertex_count, position_count);
+    for (var i = 0u; i < position_count; i += 1u) {
+        vertices[vertex_index + i].position = positions[i];
+    }
+
+    if position_count == 3 {
+        let index_index = atomicAdd(&indirect.index_count, 3u);
+        indices[index_index + 0u] = vertex_index + 0u;
+        indices[index_index + 1u] = vertex_index + 1u;
+        indices[index_index + 2u] = vertex_index + 2u;
+    }
+    else if position_count == 4 {
+        let index_index = atomicAdd(&indirect.index_count, 6u);
+        indices[index_index + 0u] = vertex_index + 0u;
+        indices[index_index + 1u] = vertex_index + 1u;
+        indices[index_index + 2u] = vertex_index + 2u;
+        indices[index_index + 3u] = vertex_index + 0u;
+        indices[index_index + 4u] = vertex_index + 2u;
+        indices[index_index + 5u] = vertex_index + 3u;
+    }
 }
 
 struct Transform {

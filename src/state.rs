@@ -13,10 +13,7 @@ const RENDER_SAMPLES: u32 = 1;
 
 #[derive(Debug, Clone, Copy, ShaderType)]
 struct GpuTetrahedron {
-    a: cgmath::Vector4<f32>,
-    b: cgmath::Vector4<f32>,
-    c: cgmath::Vector4<f32>,
-    d: cgmath::Vector4<f32>,
+    positions: [cgmath::Vector4<f32>; 4],
 }
 
 #[derive(Debug, ShaderType)]
@@ -353,10 +350,12 @@ impl State {
                 let tetrahedrons = GpuTetrahedrons {
                     count: ArrayLength,
                     data: vec![GpuTetrahedron {
-                        a: cgmath::vec4(1.0, 0.5, 0.0, 0.0),
-                        b: cgmath::vec4(1.0, -0.5, 0.5, 0.0),
-                        c: cgmath::vec4(1.0, -0.5, -0.5, 0.0),
-                        d: cgmath::vec4(0.0, 0.0, 0.0, 0.0),
+                        positions: [
+                            cgmath::vec4(1.0, 0.5, 0.0, 0.0),
+                            cgmath::vec4(1.0, -0.5, 0.5, 1.0),
+                            cgmath::vec4(1.0, -0.5, -0.5, -1.0),
+                            cgmath::vec4(2.0, 0.0, 0.0, 0.0),
+                        ],
                     }],
                 };
 
