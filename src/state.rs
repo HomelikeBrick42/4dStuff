@@ -50,12 +50,13 @@ pub struct State {
 
     tetrahedron_count: usize,
     tetrahedron_buffer: DynamicBuffer<GpuTetrahedrons>,
-    tetrahedron_triangle_buffer: wgpu::Buffer,
+    tetrahedron_vertex_buffer: wgpu::Buffer,
     tetrahedron_index_buffer: wgpu::Buffer,
     tetrahedron_indirect_buffer: FixedSizeBuffer<GpuIndirectBuffer>,
     tetrahedron_to_triangles_bind_group_layout: wgpu::BindGroupLayout,
     tetrahedron_to_triangles_bind_group: wgpu::BindGroup,
     tetrahedron_to_triangle_compute_pipeline: wgpu::ComputePipeline,
+    tetrahedron_triangle_render_pipeline: wgpu::RenderPipeline,
 }
 
 impl State {
@@ -76,7 +77,7 @@ impl State {
             wgpu::BufferUsages::STORAGE,
             &tetrahedrons,
         );
-        let tetrahedron_triangle_buffer = tetrahedron_triangle_buffer(device, tetrahedron_count);
+        let tetrahedron_vertex_buffer = tetrahedron_triangle_buffer(device, tetrahedron_count);
         let tetrahedron_index_buffer = tetrahedron_index_buffer(device, tetrahedron_count);
         let tetrahedron_indirect_buffer = FixedSizeBuffer::new(
             device,
@@ -142,7 +143,7 @@ impl State {
             device,
             &tetrahedron_to_triangles_bind_group_layout,
             tetrahedron_buffer.buffer(),
-            &tetrahedron_triangle_buffer,
+            &tetrahedron_vertex_buffer,
             &tetrahedron_index_buffer,
             tetrahedron_indirect_buffer.buffer(),
         );
@@ -166,6 +167,60 @@ impl State {
                 cache: Default::default(),
             });
 
+        let triangle_shader =
+            device.create_shader_module(wgpu::include_wgsl!("./shaders/triangles.wgsl"));
+        let tetrahedron_triangle_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Tetrahedron Triangle Pipeline Layout"),
+                bind_group_layouts: &[],
+                push_constant_ranges: &[],
+            });
+        let tetrahedron_triangle_render_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Tetrahedron Triangle Render Pipeline"),
+                layout: Some(&tetrahedron_triangle_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &triangle_shader,
+                    entry_point: Some("vertex"),
+                    compilation_options: Default::default(),
+                    buffers: &[wgpu::VertexBufferLayout {
+                        array_stride: GpuVertex::SHADER_SIZE.get(),
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &wgpu::vertex_attr_array![
+                            0 => Float32x3,
+                        ],
+                    }],
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    // TODO: maybe use this?
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Cw,
+                    cull_mode: None,
+                    unclipped_depth: false,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    conservative: false,
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState {
+                    count: RENDER_SAMPLES,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &triangle_shader,
+                    entry_point: Some("pixel"),
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Bgra8Unorm,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                multiview: None,
+                cache: Default::default(),
+            });
+
         State {
             camera,
             mouse_locked: false,
@@ -173,12 +228,13 @@ impl State {
             final_texture,
             tetrahedron_count,
             tetrahedron_buffer,
-            tetrahedron_triangle_buffer,
+            tetrahedron_vertex_buffer,
             tetrahedron_index_buffer,
             tetrahedron_indirect_buffer,
             tetrahedron_to_triangles_bind_group_layout,
             tetrahedron_to_triangles_bind_group,
             tetrahedron_to_triangle_compute_pipeline,
+            tetrahedron_triangle_render_pipeline,
         }
     }
 
@@ -256,16 +312,16 @@ impl State {
                 let tetrahedrons = GpuTetrahedrons {
                     count: ArrayLength,
                     data: vec![GpuTetrahedron {
-                        a: (!transform).transform(cgmath::vec4(0.0, 1.0, 1.0, 0.0)),
+                        a: (!transform).transform(cgmath::vec4(1.0, 1.0, 0.0, 0.0)),
                         b: (!transform).transform(cgmath::vec4(1.0, -1.0, 1.0, 0.0)),
-                        c: (!transform).transform(cgmath::vec4(-1.0, -1.0, 1.0, 0.0)),
+                        c: (!transform).transform(cgmath::vec4(1.0, -1.0, -1.0, 0.0)),
                         d: (!transform).transform(cgmath::vec4(0.0, 0.0, 0.0, 0.0)),
                     }],
                 };
 
                 self.tetrahedron_count = tetrahedrons.data.len();
                 if self.tetrahedron_buffer.write(device, queue, &tetrahedrons) {
-                    self.tetrahedron_triangle_buffer =
+                    self.tetrahedron_vertex_buffer =
                         tetrahedron_triangle_buffer(device, self.tetrahedron_count);
                     self.tetrahedron_index_buffer =
                         tetrahedron_index_buffer(device, self.tetrahedron_count);
@@ -273,7 +329,7 @@ impl State {
                         device,
                         &self.tetrahedron_to_triangles_bind_group_layout,
                         self.tetrahedron_buffer.buffer(),
-                        &self.tetrahedron_triangle_buffer,
+                        &self.tetrahedron_vertex_buffer,
                         &self.tetrahedron_index_buffer,
                         self.tetrahedron_indirect_buffer.buffer(),
                     );
@@ -316,7 +372,7 @@ impl State {
 
         // render to final texture
         {
-            let _render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Main Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &self
@@ -325,9 +381,9 @@ impl State {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 1.0,
+                            r: 0.0,
                             g: 0.0,
-                            b: 1.0,
+                            b: 0.0,
                             a: 1.0,
                         }),
                         store: wgpu::StoreOp::Store,
@@ -336,6 +392,14 @@ impl State {
                 depth_stencil_attachment: None,
                 ..Default::default()
             });
+
+            render_pass.set_pipeline(&self.tetrahedron_triangle_render_pipeline);
+            render_pass.set_vertex_buffer(0, self.tetrahedron_vertex_buffer.slice(..));
+            render_pass.set_index_buffer(
+                self.tetrahedron_index_buffer.slice(..),
+                wgpu::IndexFormat::Uint32,
+            );
+            render_pass.draw_indexed_indirect(self.tetrahedron_indirect_buffer.buffer(), 0);
         }
 
         // copy final texture to screen
