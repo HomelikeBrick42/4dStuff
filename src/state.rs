@@ -62,6 +62,7 @@ pub struct State {
     camera_buffer: BufferGroup<(FixedSizeBuffer<GpuCamera>,)>,
 
     final_texture: wgpu::Texture,
+    depth_texture: wgpu::TextureView,
 
     tetrahedron_count: usize,
     tetrahedron_buffer: DynamicBuffer<GpuTetrahedrons>,
@@ -94,6 +95,7 @@ impl State {
         );
 
         let final_texture = final_texture(device, 1, 1);
+        let depth_texture = depth_texture(device, final_texture.width(), final_texture.height());
 
         let tetrahedrons = GpuTetrahedrons {
             count: ArrayLength,
@@ -236,7 +238,13 @@ impl State {
                     polygon_mode: wgpu::PolygonMode::Fill,
                     conservative: false,
                 },
-                depth_stencil: None,
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Depth32Float,
+                    depth_write_enabled: true,
+                    depth_compare: wgpu::CompareFunction::Greater,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
                 multisample: wgpu::MultisampleState {
                     count: RENDER_SAMPLES,
                     mask: !0,
@@ -262,6 +270,8 @@ impl State {
             camera_buffer,
 
             final_texture,
+            depth_texture,
+
             tetrahedron_count,
             tetrahedron_buffer,
             tetrahedron_vertex_buffer,
@@ -330,6 +340,7 @@ impl State {
 
     pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         self.final_texture = final_texture(device, width, height);
+        self.depth_texture = depth_texture(device, width, height);
     }
 
     pub fn render(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Texture) {
@@ -511,7 +522,14 @@ impl State {
                         store: wgpu::StoreOp::Store,
                     },
                 })],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth_texture,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(0.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
                 ..Default::default()
             });
 
@@ -551,6 +569,24 @@ fn final_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Textur
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     })
+}
+
+fn depth_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::TextureView {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("Depth Texture"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: RENDER_SAMPLES,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Depth32Float,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+    texture.create_view(&Default::default())
 }
 
 fn tetrahedron_triangle_buffer(device: &wgpu::Device, tetrahedron_count: usize) -> wgpu::Buffer {

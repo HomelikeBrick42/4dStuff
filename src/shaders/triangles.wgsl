@@ -19,7 +19,7 @@ var<uniform> camera: Camera;
 @vertex
 fn vertex(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    out.clip_position = vec4<f32>(in.position.zy, 0.0, in.position.x);
+    out.clip_position = vec4<f32>(in.position.zy, 0.001, in.position.x);
     out.clip_position.x /= camera.aspect;
     out.distance_from_volume = in.distance_from_volume;
     return out;
