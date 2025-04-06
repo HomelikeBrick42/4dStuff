@@ -1,6 +1,7 @@
 struct Camera {
     transform: Transform,
     aspect: f32,
+    debug_view: u32,
 }
 
 @group(0) @binding(0)
@@ -55,8 +56,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         tetrahedron.positions[i] = transform_point(camera.transform, tetrahedron.positions[i]);
     }
 
-    // render intersection
-    if false {
+    if camera.debug_view == 0 {
+        // render intersection
+
         var positions: array<vec4<f32>, 4>;
         var position_count = 0u;
         for (var i = 0u; i < 4; i += 1u) {
@@ -93,9 +95,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             indices[index_index + 5u] = vertex_index + 3u;
         }
     }
+    else {
+        // flatten to 3d
 
-    // flatten to 3d
-    if true {
         let vertex_index = atomicAdd(&indirect.vertex_count, 4u);
         for (var i = 0u; i < 4u; i += 1u) {
             vertices[vertex_index + i].position = tetrahedron.positions[i].xyz;

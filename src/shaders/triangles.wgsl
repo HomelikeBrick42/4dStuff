@@ -11,6 +11,7 @@ struct VertexOutput {
 struct Camera {
     transform: Transform,
     aspect: f32,
+    debug_view: u32,
 }
 
 @group(0) @binding(0)
@@ -27,7 +28,12 @@ fn vertex(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn pixel(in: VertexOutput) -> @location(0) vec4<f32> {
-    return vec4<f32>(max(0.0, in.distance_from_volume), max(0.0, - in.distance_from_volume), 1.0, 1.0);
+    if camera.debug_view != 0 {
+        return vec4<f32>(max(0.0, in.distance_from_volume), max(0.0, - in.distance_from_volume), 1.0, 1.0);
+    }
+    else {
+        return vec4<f32>(1.0);
+    }
 }
 
 struct Transform {

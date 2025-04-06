@@ -44,20 +44,23 @@ struct GpuIndirectBuffer {
 struct GpuCamera {
     transform: Transform,
     aspect: f32,
+    debug_view: u32,
 }
 
 impl GpuCamera {
-    fn from_camera(camera: &Camera, aspect: f32) -> Self {
+    fn from_camera(camera: &Camera, aspect: f32, debug_view: bool) -> Self {
         Self {
             aspect,
             transform: !(Transform::translation(camera.position)
                 * Transform::from_rotor(camera.get_rotation())),
+            debug_view: debug_view as u32,
         }
     }
 }
 
 pub struct State {
     mouse_locked: bool,
+    debug_view: bool,
     camera: Camera,
     camera_buffer: BufferGroup<(FixedSizeBuffer<GpuCamera>,)>,
 
@@ -77,6 +80,8 @@ pub struct State {
 
 impl State {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> State {
+        let debug_view = true;
+
         let camera = Camera::default();
         let camera_buffer = BufferGroup::new(
             device,
@@ -87,10 +92,12 @@ impl State {
                     queue,
                     "Camera Buffer",
                     wgpu::BufferUsages::UNIFORM,
-                    &GpuCamera::from_camera(&camera, 1.0),
+                    &GpuCamera::from_camera(&camera, 1.0, debug_view),
                 ),
                 binding_type: wgpu::BufferBindingType::Uniform,
-                visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::VERTEX,
+                visibility: wgpu::ShaderStages::COMPUTE
+                    | wgpu::ShaderStages::VERTEX
+                    | wgpu::ShaderStages::FRAGMENT,
             },),
         );
 
@@ -266,6 +273,7 @@ impl State {
 
         State {
             mouse_locked: false,
+            debug_view,
             camera,
             camera_buffer,
 
@@ -291,16 +299,22 @@ impl State {
     }
 
     pub fn key(&mut self, key: KeyCode, state: ElementState, window: &winit::window::Window) {
-        if let (KeyCode::Escape, ElementState::Pressed) = (key, state) {
-            if self.mouse_locked {
-                _ = window.set_cursor_grab(winit::window::CursorGrabMode::None);
-                window.set_cursor_visible(true);
-                self.mouse_locked = false;
-            } else {
-                _ = window.set_cursor_grab(winit::window::CursorGrabMode::Confined);
-                window.set_cursor_visible(false);
-                self.mouse_locked = true;
+        match (key, state) {
+            (KeyCode::Escape, ElementState::Pressed) => {
+                if self.mouse_locked {
+                    _ = window.set_cursor_grab(winit::window::CursorGrabMode::None);
+                    window.set_cursor_visible(true);
+                    self.mouse_locked = false;
+                } else {
+                    _ = window.set_cursor_grab(winit::window::CursorGrabMode::Confined);
+                    window.set_cursor_visible(false);
+                    self.mouse_locked = true;
+                }
             }
+
+            (KeyCode::KeyG, ElementState::Pressed) => self.debug_view = !self.debug_view,
+
+            _ => (),
         }
 
         self.camera.key(key, state);
@@ -355,6 +369,7 @@ impl State {
                 (Some(&GpuCamera::from_camera(
                     &self.camera,
                     width as f32 / height as f32,
+                    self.debug_view,
                 )),),
             );
 
@@ -446,6 +461,14 @@ impl State {
                                 cgmath::vec4(a.x, a.y, a.z, 0.0),
                                 cgmath::vec4(b.x, b.y, b.z, 0.0),
                                 cgmath::vec4(c.x, c.y, c.z, 0.0),
+                            ],
+                        });
+                        tetrahedrons.data.push(GpuTetrahedron {
+                            positions: [
+                                cgmath::vec4(0.0, 0.0, 0.0 + 1.0, 1.0),
+                                cgmath::vec4(a.x, a.y, a.z + 1.0, 1.0),
+                                cgmath::vec4(b.x, b.y, b.z + 1.0, 1.0),
+                                cgmath::vec4(c.x, c.y, c.z + 1.0, 1.0),
                             ],
                         });
                     }
