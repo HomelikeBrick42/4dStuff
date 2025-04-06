@@ -26,6 +26,7 @@ struct GpuTetrahedrons {
 #[derive(Debug, Clone, Copy, ShaderType)]
 struct GpuVertex {
     position: cgmath::Vector3<f32>,
+    distance_from_volume: f32,
 }
 
 #[derive(Debug, Clone, Copy, ShaderType)]
@@ -221,6 +222,7 @@ impl State {
                         step_mode: wgpu::VertexStepMode::Vertex,
                         attributes: &wgpu::vertex_attr_array![
                             0 => Float32x3,
+                            1 => Float32,
                         ],
                     }],
                 },
@@ -347,17 +349,96 @@ impl State {
 
             // tetrahedrons
             {
-                let tetrahedrons = GpuTetrahedrons {
+                let mut tetrahedrons = GpuTetrahedrons {
                     count: ArrayLength,
-                    data: vec![GpuTetrahedron {
-                        positions: [
-                            cgmath::vec4(1.0, 0.5, 0.0, 0.0),
-                            cgmath::vec4(1.0, -0.5, 0.5, 1.0),
-                            cgmath::vec4(1.0, -0.5, -0.5, -1.0),
-                            cgmath::vec4(2.0, 0.0, 1.0, 0.0),
-                        ],
-                    }],
+                    data: vec![],
                 };
+
+                // tesseract
+                {
+                    #[derive(Debug, Clone, Copy)]
+                    struct Triangle {
+                        positions: [cgmath::Vector3<f32>; 3],
+                    }
+
+                    let cube_triangles: [_; 24] = std::array::from_fn(|i| {
+                        let x = i & (1 << 0) != 0;
+                        let y = i & (1 << 1) != 0;
+                        let z = i & (1 << 2) != 0;
+                        match (i >> 3) & 0b11 {
+                            0 => Triangle {
+                                positions: [
+                                    cgmath::vec3(
+                                        x as u8 as f32 - 0.5,
+                                        y as u8 as f32 - 0.5,
+                                        z as u8 as f32 - 0.5,
+                                    ),
+                                    cgmath::vec3(
+                                        x as u8 as f32 - 0.5,
+                                        !y as u8 as f32 - 0.5,
+                                        z as u8 as f32 - 0.5,
+                                    ),
+                                    cgmath::vec3(
+                                        x as u8 as f32 - 0.5,
+                                        y as u8 as f32 - 0.5,
+                                        !z as u8 as f32 - 0.5,
+                                    ),
+                                ],
+                            },
+                            1 => Triangle {
+                                positions: [
+                                    cgmath::vec3(
+                                        x as u8 as f32 - 0.5,
+                                        y as u8 as f32 - 0.5,
+                                        z as u8 as f32 - 0.5,
+                                    ),
+                                    cgmath::vec3(
+                                        !x as u8 as f32 - 0.5,
+                                        y as u8 as f32 - 0.5,
+                                        z as u8 as f32 - 0.5,
+                                    ),
+                                    cgmath::vec3(
+                                        x as u8 as f32 - 0.5,
+                                        !y as u8 as f32 - 0.5,
+                                        z as u8 as f32 - 0.5,
+                                    ),
+                                ],
+                            },
+                            2 => Triangle {
+                                positions: [
+                                    cgmath::vec3(
+                                        x as u8 as f32 - 0.5,
+                                        y as u8 as f32 - 0.5,
+                                        z as u8 as f32 - 0.5,
+                                    ),
+                                    cgmath::vec3(
+                                        !x as u8 as f32 - 0.5,
+                                        y as u8 as f32 - 0.5,
+                                        z as u8 as f32 - 0.5,
+                                    ),
+                                    cgmath::vec3(
+                                        x as u8 as f32 - 0.5,
+                                        y as u8 as f32 - 0.5,
+                                        !z as u8 as f32 - 0.5,
+                                    ),
+                                ],
+                            },
+                            _ => unreachable!(),
+                        }
+                    });
+
+                    for triangle in cube_triangles {
+                        let [a, b, c] = triangle.positions;
+                        tetrahedrons.data.push(GpuTetrahedron {
+                            positions: [
+                                cgmath::vec4(0.0, 0.0, 0.0, 0.0),
+                                cgmath::vec4(a.x, a.y, a.z, 0.0),
+                                cgmath::vec4(b.x, b.y, b.z, 0.0),
+                                cgmath::vec4(c.x, c.y, c.z, 0.0),
+                            ],
+                        });
+                    }
+                }
 
                 self.tetrahedron_count = tetrahedrons.data.len();
                 if self.tetrahedron_buffer.write(device, queue, &tetrahedrons) {
@@ -475,7 +556,9 @@ fn final_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Textur
 fn tetrahedron_triangle_buffer(device: &wgpu::Device, tetrahedron_count: usize) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("Tetrahedron Triangle Buffer"),
-        size: tetrahedron_count.max(1) as wgpu::BufferAddress * GpuVertex::SHADER_SIZE.get() * 4,
+        size: tetrahedron_count.max(1) as wgpu::BufferAddress
+            * GpuVertex::SHADER_SIZE.get()
+            * (4 + 4),
         usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::VERTEX,
         mapped_at_creation: false,
     })
@@ -484,7 +567,10 @@ fn tetrahedron_triangle_buffer(device: &wgpu::Device, tetrahedron_count: usize) 
 fn tetrahedron_index_buffer(device: &wgpu::Device, tetrahedron_count: usize) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("Tetrahedron Index Buffer"),
-        size: tetrahedron_count.max(1) as wgpu::BufferAddress * u32::SHADER_SIZE.get() * 6,
+        size: tetrahedron_count.max(1) as wgpu::BufferAddress
+            * u32::SHADER_SIZE.get()
+            * (2 + 4)
+            * 3,
         usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDEX,
         mapped_at_creation: false,
     })

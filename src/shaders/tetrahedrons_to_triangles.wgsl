@@ -20,6 +20,7 @@ var<storage, read> tetrahedrons: Tetrahedrons;
 
 struct Vertex {
     position: vec3<f32>,
+    distance_from_volume: f32,
 }
 
 @group(1) @binding(1)
@@ -54,39 +55,66 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         tetrahedron.positions[i] = transform_point(camera.transform, tetrahedron.positions[i]);
     }
 
-    var positions: array<vec3<f32>, 4>;
-    var position_count = 0u;
-    for (var i = 0u; i < 4; i += 1u) {
-        for (var j = i + 1u; i < 4; i += 1u) {
-            let a = tetrahedron.positions[i];
-            let b = tetrahedron.positions[j];
-            if sign(a.w) != sign(b.w) {
-                let distance = abs(a.w) + abs(b.w);
-                positions[position_count] = mix(a.xyz, b.xyz, abs(a.w) / distance);
-                position_count += 1u;
+    // render intersection
+    if false {
+        var positions: array<vec4<f32>, 4>;
+        var position_count = 0u;
+        for (var i = 0u; i < 4; i += 1u) {
+            for (var j = i + 1u; i < 4; i += 1u) {
+                let a = tetrahedron.positions[i];
+                let b = tetrahedron.positions[j];
+                if sign(a.w) != sign(b.w) {
+                    let distance = abs(a.w) + abs(b.w);
+                    positions[position_count] = mix(a, b, abs(a.w) / distance);
+                    position_count += 1u;
+                }
             }
+        }
+
+        let vertex_index = atomicAdd(&indirect.vertex_count, position_count);
+        for (var i = 0u; i < position_count; i += 1u) {
+            vertices[vertex_index + i].position = positions[i].xyz;
+            vertices[vertex_index + i].distance_from_volume = positions[i].w;
+        }
+
+        if position_count == 3 {
+            let index_index = atomicAdd(&indirect.index_count, 3u);
+            indices[index_index + 0u] = vertex_index + 0u;
+            indices[index_index + 1u] = vertex_index + 1u;
+            indices[index_index + 2u] = vertex_index + 2u;
+        }
+        else if position_count == 4 {
+            let index_index = atomicAdd(&indirect.index_count, 6u);
+            indices[index_index + 0u] = vertex_index + 0u;
+            indices[index_index + 1u] = vertex_index + 1u;
+            indices[index_index + 2u] = vertex_index + 2u;
+            indices[index_index + 3u] = vertex_index + 0u;
+            indices[index_index + 4u] = vertex_index + 2u;
+            indices[index_index + 5u] = vertex_index + 3u;
         }
     }
 
-    let vertex_index = atomicAdd(&indirect.vertex_count, position_count);
-    for (var i = 0u; i < position_count; i += 1u) {
-        vertices[vertex_index + i].position = positions[i];
-    }
+    // flatten to 3d
+    if true {
+        let vertex_index = atomicAdd(&indirect.vertex_count, 4u);
+        for (var i = 0u; i < 4u; i += 1u) {
+            vertices[vertex_index + i].position = tetrahedron.positions[i].xyz;
+            vertices[vertex_index + i].distance_from_volume = tetrahedron.positions[i].w;
+        }
 
-    if position_count == 3 {
-        let index_index = atomicAdd(&indirect.index_count, 3u);
-        indices[index_index + 0u] = vertex_index + 0u;
-        indices[index_index + 1u] = vertex_index + 1u;
-        indices[index_index + 2u] = vertex_index + 2u;
-    }
-    else if position_count == 4 {
-        let index_index = atomicAdd(&indirect.index_count, 6u);
+        let index_index = atomicAdd(&indirect.index_count, 12u);
         indices[index_index + 0u] = vertex_index + 0u;
         indices[index_index + 1u] = vertex_index + 1u;
         indices[index_index + 2u] = vertex_index + 2u;
         indices[index_index + 3u] = vertex_index + 0u;
-        indices[index_index + 4u] = vertex_index + 2u;
+        indices[index_index + 4u] = vertex_index + 1u;
         indices[index_index + 5u] = vertex_index + 3u;
+        indices[index_index + 6u] = vertex_index + 0u;
+        indices[index_index + 7u] = vertex_index + 2u;
+        indices[index_index + 8u] = vertex_index + 3u;
+        indices[index_index + 9u] = vertex_index + 1u;
+        indices[index_index + 10u] = vertex_index + 2u;
+        indices[index_index + 11u] = vertex_index + 3u;
     }
 }
 

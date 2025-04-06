@@ -1,9 +1,11 @@
 struct VertexInput {
     @location(0) position: vec3<f32>,
+    @location(1) distance_from_volume: f32,
 }
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
+    @location(0) distance_from_volume: f32,
 }
 
 struct Camera {
@@ -19,12 +21,13 @@ fn vertex(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
     out.clip_position = vec4<f32>(in.position.zy, 0.0, in.position.x);
     out.clip_position.x /= camera.aspect;
+    out.distance_from_volume = in.distance_from_volume;
     return out;
 }
 
 @fragment
 fn pixel(in: VertexOutput) -> @location(0) vec4<f32> {
-    return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+    return vec4<f32>(max(0.0, in.distance_from_volume), max(0.0, - in.distance_from_volume), 1.0, 1.0);
 }
 
 struct Transform {
