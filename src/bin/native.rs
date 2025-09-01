@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use ray_tracer::state::State;
+use rendering_4d::state::State;
 use winit::{
     application::ApplicationHandler,
     dpi::{PhysicalPosition, PhysicalSize},
@@ -33,7 +33,7 @@ impl ApplicationHandler for App {
 
         let window = Arc::new(
             event_loop
-                .create_window(Window::default_attributes().with_title("4D Ray Tracer"))
+                .create_window(Window::default_attributes().with_title("4D Rendering"))
                 .expect("window should be successfully created"),
         );
 

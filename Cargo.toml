@@ -1,5 +1,5 @@
 [package]
-name = "ray_tracer"
+name = "rendering_4d"
 version = "0.1.0"
 edition = "2024"
 

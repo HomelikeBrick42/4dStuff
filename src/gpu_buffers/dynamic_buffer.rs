@@ -2,13 +2,13 @@ use crate::gpu_buffers::Buffer;
 use encase::{ShaderType, StorageBuffer, internal::WriteInto};
 use std::marker::PhantomData;
 
-pub struct DynamicBuffer<T> {
+pub struct DynamicBuffer<T: ?Sized> {
     name: &'static str,
     buffer: wgpu::Buffer,
     _data: PhantomData<T>,
 }
 
-impl<T: ShaderType + WriteInto> DynamicBuffer<T> {
+impl<T: ShaderType + WriteInto + ?Sized> DynamicBuffer<T> {
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -31,7 +31,7 @@ impl<T: ShaderType + WriteInto> DynamicBuffer<T> {
     }
 }
 
-impl<T: ShaderType + WriteInto> Buffer for DynamicBuffer<T> {
+impl<T: ShaderType + WriteInto + ?Sized> Buffer for DynamicBuffer<T> {
     type Data = T;
 
     fn min_size() -> std::num::NonZero<wgpu::BufferAddress> {
