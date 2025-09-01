@@ -1,6 +1,7 @@
 struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) distance_from_volume: f32,
+    @location(2) tetrahedron_index: u32,
 }
 
 struct VertexOutput {

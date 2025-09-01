@@ -22,6 +22,7 @@ var<storage, read> tetrahedrons: Tetrahedrons;
 struct Vertex {
     position: vec3<f32>,
     distance_from_volume: f32,
+    tetrahedron_index: u32,
 }
 
 @group(1) @binding(1)
@@ -59,7 +60,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     if camera.debug_view == 0 {
         // render intersection
 
-        var positions: array<vec4<f32>, 4>;
+        var positions: array<vec4<f32>, 6>;
         var position_count = 0u;
         for (var i = 0u; i < 4; i += 1u) {
             for (var j = i + 1u; i < 4; i += 1u) {
@@ -77,6 +78,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         for (var i = 0u; i < position_count; i += 1u) {
             vertices[vertex_index + i].position = positions[i].xyz;
             vertices[vertex_index + i].distance_from_volume = positions[i].w;
+            vertices[vertex_index + i].tetrahedron_index = tetrahedron_index;
         }
 
         if position_count == 3 {
@@ -102,6 +104,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         for (var i = 0u; i < 4u; i += 1u) {
             vertices[vertex_index + i].position = tetrahedron.positions[i].xyz;
             vertices[vertex_index + i].distance_from_volume = tetrahedron.positions[i].w;
+            vertices[vertex_index + i].tetrahedron_index = tetrahedron_index;
         }
 
         let index_index = atomicAdd(&indirect.index_count, 12u);

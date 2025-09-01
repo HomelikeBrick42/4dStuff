@@ -27,6 +27,7 @@ struct GpuTetrahedrons {
 struct GpuVertex {
     position: cgmath::Vector3<f32>,
     distance_from_volume: f32,
+    tetrahedron_index: u32,
 }
 
 #[derive(Debug, Clone, Copy, ShaderType)]
@@ -232,6 +233,7 @@ impl State {
                         attributes: &wgpu::vertex_attr_array![
                             0 => Float32x3,
                             1 => Float32,
+                            2 => Uint32,
                         ],
                     }],
                 },
@@ -381,95 +383,73 @@ impl State {
                 };
 
                 // tesseract
-                {
-                    #[derive(Debug, Clone, Copy)]
-                    struct Triangle {
-                        positions: [cgmath::Vector3<f32>; 3],
-                    }
+                if true {
+                    let he = cgmath::Vector4::new(0.5f32, 0.5, 0.5, 0.5);
 
-                    let cube_triangles: [_; 24] = std::array::from_fn(|i| {
-                        let x = i & (1 << 0) != 0;
-                        let y = i & (1 << 1) != 0;
-                        let z = i & (1 << 2) != 0;
-                        match (i >> 3) & 0b11 {
-                            0 => Triangle {
-                                positions: [
-                                    cgmath::vec3(
-                                        x as u8 as f32 - 0.5,
-                                        y as u8 as f32 - 0.5,
-                                        z as u8 as f32 - 0.5,
-                                    ),
-                                    cgmath::vec3(
-                                        x as u8 as f32 - 0.5,
-                                        !y as u8 as f32 - 0.5,
-                                        z as u8 as f32 - 0.5,
-                                    ),
-                                    cgmath::vec3(
-                                        x as u8 as f32 - 0.5,
-                                        y as u8 as f32 - 0.5,
-                                        !z as u8 as f32 - 0.5,
-                                    ),
-                                ],
-                            },
-                            1 => Triangle {
-                                positions: [
-                                    cgmath::vec3(
-                                        x as u8 as f32 - 0.5,
-                                        y as u8 as f32 - 0.5,
-                                        z as u8 as f32 - 0.5,
-                                    ),
-                                    cgmath::vec3(
-                                        !x as u8 as f32 - 0.5,
-                                        y as u8 as f32 - 0.5,
-                                        z as u8 as f32 - 0.5,
-                                    ),
-                                    cgmath::vec3(
-                                        x as u8 as f32 - 0.5,
-                                        !y as u8 as f32 - 0.5,
-                                        z as u8 as f32 - 0.5,
-                                    ),
-                                ],
-                            },
-                            2 => Triangle {
-                                positions: [
-                                    cgmath::vec3(
-                                        x as u8 as f32 - 0.5,
-                                        y as u8 as f32 - 0.5,
-                                        z as u8 as f32 - 0.5,
-                                    ),
-                                    cgmath::vec3(
-                                        !x as u8 as f32 - 0.5,
-                                        y as u8 as f32 - 0.5,
-                                        z as u8 as f32 - 0.5,
-                                    ),
-                                    cgmath::vec3(
-                                        x as u8 as f32 - 0.5,
-                                        y as u8 as f32 - 0.5,
-                                        !z as u8 as f32 - 0.5,
-                                    ),
-                                ],
-                            },
-                            _ => unreachable!(),
-                        }
-                    });
+                    let vertices = [
+                        cgmath::Vector4::new(-he.x, -he.y, -he.z, -he.w),
+                        cgmath::Vector4::new(he.x, -he.y, -he.z, -he.w),
+                        cgmath::Vector4::new(-he.x, he.y, -he.z, -he.w),
+                        cgmath::Vector4::new(he.x, he.y, -he.z, -he.w),
+                        cgmath::Vector4::new(-he.x, -he.y, he.z, -he.w),
+                        cgmath::Vector4::new(he.x, -he.y, he.z, -he.w),
+                        cgmath::Vector4::new(-he.x, he.y, he.z, -he.w),
+                        cgmath::Vector4::new(he.x, he.y, he.z, -he.w),
+                        cgmath::Vector4::new(-he.x, -he.y, -he.z, he.w),
+                        cgmath::Vector4::new(he.x, -he.y, -he.z, he.w),
+                        cgmath::Vector4::new(-he.x, he.y, -he.z, he.w),
+                        cgmath::Vector4::new(he.x, he.y, -he.z, he.w),
+                        cgmath::Vector4::new(-he.x, -he.y, he.z, he.w),
+                        cgmath::Vector4::new(he.x, -he.y, he.z, he.w),
+                        cgmath::Vector4::new(-he.x, he.y, he.z, he.w),
+                        cgmath::Vector4::new(he.x, he.y, he.z, he.w),
+                    ];
 
-                    for triangle in cube_triangles {
-                        let [a, b, c] = triangle.positions;
+                    #[rustfmt::skip]
+                    let indices: [usize; _] = [
+                        8,  4, 14,  2,  8, 10,  2, 14,  8,  0,  4,  2,  8, 12, 14,  4,  6,  4,  2, 14, /* -X */
+                        11, 13, 1,  7, 11,  3,  7,  1, 11, 15, 13,  7, 11,  9,  1, 13,  5, 13,  7,  1, /* +X */
+                        4, 13,  1,  8,  4,  0,  8,  1,  4, 12, 13,  8,  4,  5,  1, 13,  9, 13,  8,  1, /* -Y */
+                        14, 7, 11,  2, 14, 10,  2, 11, 14,  6,  7,  2, 14, 15, 11,  7,  3,  7,  2, 11, /* +Y */
+                        1,  8, 11,  2,  1,  3,  2, 11,  1,  0,  8,  2,  1,  9, 11,  8, 10,  8,  2, 11, /* -Z */
+                        13, 4,  7, 14, 13, 15, 14,  7, 13, 12,  4, 14, 13,  5,  7,  4,  6,  4, 14,  7, /* +Z */
+                        1,  7,  4,  2,  1,  0,  2,  4,  1,  3,  7,  2,  1,  5,  4,  7,  6,  7,  2,  4, /* -W */
+                        8, 14, 13, 11,  8,  9, 11, 13,  8, 10, 14, 11,  8, 12, 13, 14, 15, 14, 11, 13, /* +W */
+                    ];
+
+                    for &[a, b, c, d] in indices.as_chunks::<4>().0 {
                         tetrahedrons.data.push(GpuTetrahedron {
-                            positions: [
-                                cgmath::vec4(0.0, 0.0, 0.0, 0.0),
-                                cgmath::vec4(a.x, a.y, a.z, 0.0),
-                                cgmath::vec4(b.x, b.y, b.z, 0.0),
-                                cgmath::vec4(c.x, c.y, c.z, 0.0),
-                            ],
+                            positions: [vertices[a], vertices[b], vertices[c], vertices[d]],
                         });
+                    }
+                }
+
+                // orthoplex
+                if false {
+                    let he = cgmath::Vector4::new(0.5f32, 0.5, 0.5, 0.5);
+
+                    let vertices = [
+                        cgmath::Vector4::new(-he.x, 0.0, 0.0, 0.0),
+                        cgmath::Vector4::new(he.x, 0.0, 0.0, 0.0),
+                        cgmath::Vector4::new(0.0, -he.y, 0.0, 0.0),
+                        cgmath::Vector4::new(0.0, he.y, 0.0, 0.0),
+                        cgmath::Vector4::new(0.0, 0.0, -he.z, 0.0),
+                        cgmath::Vector4::new(0.0, 0.0, he.z, 0.0),
+                        cgmath::Vector4::new(0.0, 0.0, 0.0, -he.w),
+                        cgmath::Vector4::new(0.0, 0.0, 0.0, he.w),
+                    ];
+
+                    #[rustfmt::skip]
+                    let indices: [usize; _] = [
+                        6, 0, 2, 4, 1, 2, 4, 6, 6, 1, 3, 4, 0, 3, 4, 6, /* -W and -Z */
+                        6, 0, 3, 5, 1, 3, 5, 6, 6, 1, 2, 5, 0, 2, 5, 6, /* -W and +Z */
+                        7, 0, 2, 5, 1, 2, 5, 7, 7, 1, 3, 5, 0, 3, 5, 7, /* +W and +Z */
+                        7, 0, 3, 4, 1, 3, 4, 7, 7, 1, 2, 4, 0, 2, 4, 7, /* +W and -Z */
+                    ];
+
+                    for &[a, b, c, d] in indices.as_chunks::<4>().0 {
                         tetrahedrons.data.push(GpuTetrahedron {
-                            positions: [
-                                cgmath::vec4(0.0, 0.0, 0.0 + 1.0, 1.0),
-                                cgmath::vec4(a.x, a.y, a.z + 1.0, 1.0),
-                                cgmath::vec4(b.x, b.y, b.z + 1.0, 1.0),
-                                cgmath::vec4(c.x, c.y, c.z + 1.0, 1.0),
-                            ],
+                            positions: [vertices[a], vertices[b], vertices[c], vertices[d]],
                         });
                     }
                 }
